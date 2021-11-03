@@ -10,23 +10,23 @@
 	
 ## Notes
 
- *. Increased concurrency and automation
- *. Currently using NFT-maker pro
- *. Utility in the future
-	*. Airdropped art to certain holders
- *. UI
-	*. Put in users and holders
- *. We have asset IDs (see NFT maker)
- *. After next drop
-   *. Telling a documentary on a senior citizen going through the
+ * Increased concurrency and automation
+ * Currently using NFT-maker pro
+ * Utility in the future
+	* Airdropped art to certain holders
+ * UI
+	* Put in users and holders
+ * We have asset IDs (see NFT maker)
+ * After next drop
+    * Telling a documentary on a senior citizen going through the
       process of learning about how NFTs work.
-   *. The first ticketing system with a burning system. 
-   *. Blockchain authenticated gate system to view the video.
-	  *. cookies
-   *. Old camera, the combination of the new and the old, anyone comes
+    * The first ticketing system with a burning system. 
+    * Blockchain authenticated gate system to view the video.
+	   * cookies
+    * Old camera, the combination of the new and the old, anyone comes
       onto the platform, find out what the biggest picture behind the
       crypto, that is the art piece.
-   *. Maximize the audience that collectively experiences the passion
+    * Maximize the audience that collectively experiences the passion
       of the artist fashioning from the human spirit art. "Art is
       fashioning from the materials of the human spirit that did not
       exist before."
