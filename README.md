@@ -51,3 +51,5 @@ to include, and I shall include them.
 20211031190801NJ Made the files.
 
 20211031211105NJ I recommend freezing all channels right before the NFT launch and putting it into the main channel. Or, autoblock all replies with an addr suffix.
+
+20211102224618NJ Worked on several contracts and got the foundations set up.
