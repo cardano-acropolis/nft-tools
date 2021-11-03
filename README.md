@@ -40,3 +40,14 @@ tickets sale date).
 8dbef3ae32a5ac935172ab84cb7a3540603207892c9ab63956490086
 
 Keep identities on the down low.
+
+## Log
+
+20211031180728NJ I have created the cabal package, found some scripts
+to include, and I shall include them.
+
+20211031190442NJ Getting it all set up. I added information in the documentation for all of these.
+
+20211031190801NJ Made the files.
+
+20211031211105NJ I recommend freezing all channels right before the NFT launch and putting it into the main channel. Or, autoblock all replies with an addr suffix.

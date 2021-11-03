@@ -87,6 +87,39 @@ executable nft-tools
     -- Base language which the package is written in.
     default-language: Haskell2010
 
+executable generate-vending-machine
+    main-is:          generate-vending-machine.hs
+    build-depends:
+        base ^>=4.14.3.0,
+        nft-tools
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+executable generate-airdrop
+    main-is:          generate-airdrop.hs
+    build-depends:
+        base ^>=4.14.3.0,
+        nft-tools
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+executable ticket-sale
+    main-is:          ticket-sale.hs
+    build-depends:
+        base ^>=4.14.3.0,
+        nft-tools
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+executable generate-vending-machine
+    -- .hs or .lhs file containing the Main module.
+    main-is:          generate-vending-machine.hs
+    build-depends:
+        base ^>=4.14.3.0,
+        nft-tools
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
 test-suite nft-tools-test
     -- Base language which the package is written in.
     default-language: Haskell2010
