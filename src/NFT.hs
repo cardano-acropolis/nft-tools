@@ -69,3 +69,4 @@ nftPolicy params utxo = mkMintingPolicyScript $
 mkNFTValidator :: NFTParams -> BuiltinData -> BuiltinData -> ScriptContext -> Bool
 mkNFTValidator params _ _ ctx =
   traceIfFalse "NFT missing from input" 
+

@@ -39,6 +39,13 @@ data VendingMachineParams = VendingMachineParams
   , vmInterval     :: POSIXTimeRange
   }
 
+data VendingMachineRedeemer =
+  SetPrice Integer
+  | AddNFT Integer
+  | BuyNFT Integer
+  | Withdraw Integer Integer
+  deriving (Show, Prelude.Eq)
+
 mkMachinePolicy :: VendingMachineParams -> Redeemer -> ScriptContext -> Bool
 mkMachinePolicy vmp _ ctx =
   traceIfFalse "did not pay all pubkeys" mustPayToPubKey $ vmPubKey vmp &&
@@ -46,8 +53,15 @@ mkMachinePolicy vmp _ ctx =
   traceIfFalse "must include metadat" mustIncludeDatum $ vmMetadata vmp &&
   traceIfFalse "customer must receive NFT" mustSpendPubKeyOutput
 
-
  -- https://github.com/input-output-hk/plutus-apps/blob/main/plutus-contract/src/Plutus/Contract/StateMachine.hs
+
+{-# INLINABLE lovelaces #-}
+lovelaces :: Value -> Integer
+
+{-# INLINABLE transition #-}
+transition :: TokenSale -> State Integer -> TSRedeemer -> Maybe (TxConstraints Void, State Integer)
+transition ts s r = case (stateValue s, stateData s, r) of
+  (v, _, SetPrice p) | p >= 0 -> Just ( Constraints.mustBeSignedBy )
 
 initialize :: PlutusTx.FromData -> Contract w schema e state
 initialize = do
