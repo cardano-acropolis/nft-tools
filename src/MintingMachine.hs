@@ -39,12 +39,23 @@ data VendingMachineParams = VendingMachineParams
   , vmInterval     :: POSIXTimeRange
   }
 
+NftSale = NftSale
+  {
+    nftSeller :: !PubKeyHash
+  , nftToken  :: !AssetClass
+  , nftTT     :: !(Maybe ThreadToken)
+  }
+
+PlutusTx.makeLift ''VendingMachineParams
+
 data VendingMachineRedeemer =
   SetPrice Integer
   | AddNFT Integer
   | BuyNFT Integer
   | Withdraw Integer Integer
   deriving (Show, Prelude.Eq)
+
+PlutusTx.unstableMakeIsData ''VendingMachineRedeemer
 
 mkMachinePolicy :: VendingMachineParams -> Redeemer -> ScriptContext -> Bool
 mkMachinePolicy vmp _ ctx =
@@ -59,10 +70,19 @@ mkMachinePolicy vmp _ ctx =
 lovelaces :: Value -> Integer
 
 {-# INLINABLE transition #-}
-transition :: TokenSale -> State Integer -> TSRedeemer -> Maybe (TxConstraints Void, State Integer)
-transition ts s r = case (stateValue s, stateData s, r) of
-  (v, _, SetPrice p) | p >= 0 -> Just ( Constraints.mustBeSignedBy )
+transition :: NftSale -> State Integer -> TSRedeemer -> Maybe (TxConstraints Void, State Integer)
+transition nfts s r = case (stateValue s, stateData s, r) of
+  (v, _, SetPrice p)  | p >= 0    -> Just ( Constraints.mustBeSignedBy (tsSeller nfts)
+                                          , State p v
+                                          )
+  (v, p, AddNFT n)    | n > 0     -> Just ( mempty
+                                          , State p $ v <> assetClassValue (tsToken nfts) n
+                                          )
+  (v, p, BuyNFT n)    | n > 0     -> Just ( mempty
+                                          , State p $ v <> assetClassValue (tsToken nfts) n
+                                          )
 
+{-# INLINABLE initialize #-}
 initialize :: PlutusTx.FromData -> Contract w schema e state
 initialize = do
   runInitialiseWith 
