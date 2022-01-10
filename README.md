@@ -7,6 +7,12 @@
  3. a staking mechanism, and 
  4. royalty mechanism so that you can get kickbacks for your work
     long-term.
+ 5. Another factor on which I would liketo work is the use of receipts
+    of purchase to convet items into NFTs -- that the holder of the
+    wallet of the receipt also has ownership and rightful posession of
+    the thing itself.
+     * What is the proper language to be included in such an NFT?
+     * What is the proper legal instrument for such an entity?
 	
 ## Notes
 
@@ -60,3 +66,4 @@ replies with an addr suffix.
 challenge could participate as the challenge team. Challenge: how do
 we continue to scale with the insane number of proposals that are
 happening. 
+

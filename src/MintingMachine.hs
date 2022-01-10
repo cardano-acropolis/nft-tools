@@ -86,4 +86,3 @@ transition nfts s r = case (stateValue s, stateData s, r) of
 initialize :: PlutusTx.FromData -> Contract w schema e state
 initialize = do
   runInitialiseWith 
-  
