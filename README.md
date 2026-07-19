@@ -1,69 +1,45 @@
-# NFT Tools
+# nft-tools
 
-## Modules
+Tools for working with and issuing NFTs on Cardano.
 
- 1. Vending machines, 
- 2. a mechanism for verifiably random and fair airdrop, 
- 3. a staking mechanism, and 
- 4. royalty mechanism so that you can get kickbacks for your work
-    long-term.
- 5. Another factor on which I would liketo work is the use of receipts
-    of purchase to convet items into NFTs -- that the holder of the
-    wallet of the receipt also has ownership and rightful posession of
-    the thing itself.
+## Planned modules
+
+ 1. **Vending machine** — a state machine that sells NFTs from an
+    inventory at a seller-controlled price (`src/MintingMachine.hs`).
+ 2. **Airdrop** — a mechanism for verifiably random and fair airdrops
+    (`app/generate-airdrop.hs`).
+ 3. **Staking** — a staking mechanism.
+ 4. **Royalties** — kickbacks to the creator on secondary sales.
+ 5. **Receipts** — receipts of purchase that convert physical items
+    into NFTs, so that the holder of the wallet holding the receipt
+    also has ownership and rightful possession of the thing itself.
      * What is the proper language to be included in such an NFT?
      * What is the proper legal instrument for such an entity?
-	
+
+## Status
+
+| Component | File | State |
+|---|---|---|
+| One-shot NFT minting policy | `src/NFT.hs` | Drafted; needs Plutus toolchain to build |
+| Vending machine | `src/MintingMachine.hs` | Drafted; validator checks and `Withdraw` are TODO |
+| Off-chain client | `src/Client.hs` | Stub |
+| `generate-vending-machine` | `app/generate-vending-machine.hs` | CLI skeleton |
+| `generate-airdrop` | `app/generate-airdrop.hs` | Stub |
+| `ticket-sale` | `app/ticket-sale.hs` | Stub |
+| Test suite | `test/MyLibTest.hs` | Placeholder |
+
+The Plutus contract modules (`NFT`, `MintingMachine`, `Client`) are not
+yet part of the cabal build: they need a pinned plutus-apps environment
+(`plutus-ledger`, `plutus-tx`, `cardano-api`). See the note in
+`nft-tools.cabal`.
+
+## Building
+
+```sh
+cabal build all
+cabal test
+```
+
 ## Notes
 
- * Increased concurrency and automation
- * Currently using NFT-maker pro
- * Utility in the future
-	* Airdropped art to certain holders
- * UI
-	* Put in users and holders
- * We have asset IDs (see NFT maker)
- * After next drop
-    * Telling a documentary on a senior citizen going through the
-      process of learning about how NFTs work.
-    * The first ticketing system with a burning system. 
-    * Blockchain authenticated gate system to view the video.
-	   * cookies
-    * Old camera, the combination of the new and the old, anyone comes
-      onto the platform, find out what the biggest picture behind the
-      crypto, that is the art piece.
-    * Maximize the audience that collectively experiences the passion
-      of the artist fashioning from the human spirit art. "Art is
-      fashioning from the materials of the human spirit that did not
-      exist before."
-
-Ready for deliverables: 40 minutes each sit down and watch it.
-
-Timeline for ticket system: Trailor but the trailer promotes the sale
-of the ticket -- so the ticket must be ready by this point (10,000
-tickets sale date).
-
-8dbef3ae32a5ac935172ab84cb7a3540603207892c9ab63956490086
-
-Keep identities on the down low.
-
-** Log
-
-20211031180728NJ I have created the cabal package, found some scripts
-to include, and I shall include them.
-
-20211031190442NJ Getting it all set up. I added information in the documentation for all of these.
-
-20211031190801NJ Made the files.
-
-20211031211105NJ I recommend freezing all channels right before the
-NFT launch and putting it into the main channel. Or, autoblock all
-replies with an addr suffix.
-
-20211102224618NJ Worked on several contracts and got the foundations set up.
-
-20211104183008NJ Quasar: DAO for each challenge of fund seven -- the
-challenge could participate as the challenge team. Challenge: how do
-we continue to scale with the insane number of proposals that are
-happening. 
-
+Working notes and the project log live in [docs/NOTES.md](docs/NOTES.md).

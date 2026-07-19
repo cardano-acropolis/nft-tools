@@ -1,9 +1,7 @@
-import System.Environment
-import Prelude
-
 import qualified MyLib (someFunc)
 
 main :: IO ()
 main = do
-  putStrLn "Hello, Haskell!"
+  -- TODO: verifiably random and fair airdrop to a set of holders.
+  putStrLn "generate-airdrop: not yet implemented"
   MyLib.someFunc

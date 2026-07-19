@@ -13,8 +13,15 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
+-- | One-shot NFT minting policy: the token can only be minted once,
+-- because the policy requires a specific UTxO to be consumed.
+--
+-- Work in progress: not yet part of the cabal build (needs the Plutus
+-- toolchain — see the note in nft-tools.cabal).
 module NFT
-  (
+  ( NftParams (..)
+  , mkNFTPolicy
+  , nftPolicy
   ) where
 
 import Cardano.Api.Shelley (PlutusScript (..), PlutusScriptV1, PlutusScriptV2)
@@ -38,35 +45,42 @@ data NftParams = NftParams
   , nftPubKey    :: PubKey
   }
 
+PlutusTx.makeLift ''NftParams
+
 {-# INLINABLE mkNFTPolicy #-}
 mkNFTPolicy :: NftParams -> TxOutRef -> BuiltinData -> ScriptContext -> Bool
-mkNFTPolicy params utxo _ ctx = traceIfFalse "UTxO not consumed" hasUTxO &&
-  traceIfFalse "wrong ammount minted" check Minted Amount
+mkNFTPolicy params utxo _ ctx =
+  traceIfFalse "UTxO not consumed" hasUTxO &&
+  traceIfFalse "wrong amount minted" checkMintedAmount
   where
     info :: TxInfo
     info = scriptContextTxInfo ctx
+
+    -- Ensures that the UTxO was actually consumed; otherwise the NFT
+    -- could be minted again.
     hasUTxO :: Bool
     hasUTxO = any (\i -> txInInfoOutRef i == utxo) $ txInfoInputs info
-    -- ensures that the UTxO was actually consumed otherwise NFT could
-    -- be minted again.
+
+    -- Checks the minting info from the TxInfo and ensures that exactly
+    -- one token was minted, with the token name specified in the params.
     checkMintedAmount :: Bool
     checkMintedAmount = case flattenValue (txInfoMint info) of
-      [(_, tn', amt)] -> tn' == (nftTokenName params) && amt == 1
+      [(_, tn', amt)] -> tn' == nftTokenName params && amt == 1
       _               -> False
-    -- This checks all of the minting info from the TxInfo, which is
-    -- the scriptContextTxInfo from ctx, and ensures that the token
-    -- name of the output is the same as the token name that was
-    -- specified as well as that there was only one minted.
 
 nftPolicy :: NftParams -> TxOutRef -> Scripts.MintingPolicy
 nftPolicy params utxo = mkMintingPolicyScript $
-    $$(PlutusTx.compile [|| \tn utxo' -> Scripts.wrapMintingPolicy $ mkNFTPolicy tn utxo' ||])
+    $$(PlutusTx.compile [|| \params' utxo' -> Scripts.wrapMintingPolicy $ mkNFTPolicy params' utxo' ||])
     `PlutusTx.applyCode`
-     PlutusTx.liftCode (nftTokenName params)
+     PlutusTx.liftCode params
     `PlutusTx.applyCode`
      PlutusTx.liftCode utxo
 
-mkNFTValidator :: NFTParams -> BuiltinData -> BuiltinData -> ScriptContext -> Bool
+mkNFTValidator :: NftParams -> BuiltinData -> BuiltinData -> ScriptContext -> Bool
 mkNFTValidator params _ _ ctx =
-  traceIfFalse "NFT missing from input" 
-
+  traceIfFalse "NFT missing from input" checkNftPresent
+  where
+    -- TODO: check that the NFT (nftAC params) is present in the
+    -- validated script input.
+    checkNftPresent :: Bool
+    checkNftPresent = False
