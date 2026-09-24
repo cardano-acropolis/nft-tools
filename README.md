@@ -24,7 +24,7 @@ Tools for working with and issuing NFTs on Cardano.
 | Vending machine | `src/MintingMachine.hs` | Drafted; validator checks and `Withdraw` are TODO |
 | Off-chain client | `src/Client.hs` | Stub |
 | `generate-vending-machine` | `app/generate-vending-machine.hs` | CLI skeleton |
-| `generate-airdrop` | `app/generate-airdrop.hs` | Stub |
+| `generate-airdrop` | `app/generate-airdrop.hs` | Working: weighted, verifiable draw from a public seed |
 | `ticket-sale` | `app/ticket-sale.hs` | Stub |
 | Test suite | `test/MyLibTest.hs` | Placeholder |
 
