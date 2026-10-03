@@ -10,68 +10,131 @@ build-type:         Simple
 extra-doc-files:
     CHANGELOG.md
     README.md
+extra-source-files:
+    get-crypto-libs.sh
 
-common warnings
-    ghc-options: -Wall
+-- GHC and Plinth both accept these.
+common ghc-options
+    ghc-options:        -Wall
+    default-language:   Haskell2010
+    default-extensions:
+        ImportQualifiedPost
+        OverloadedStrings
+
+-- Off-chain code. GADTs are not part of the Plinth subset.
+common ghc-only-options
+    import:             ghc-options
+    default-extensions:
+        GADTs
+
+-- Flags the Plinth compiler needs in order to see unfoldings. The plugin
+-- option selects Plutus Core 1.1.0. plutus-tx-plugin 1.71's default target
+-- is Core 1.2.0, which a Plutus V3 script cannot deserialise until the
+-- Dijkstra hard fork (major protocol version 12). 1.1.0 is valid from Chang
+-- (protocol version 9) onward. The plugin module is Plinth.Plugin;
+-- PlutusTx.compile registers it. The pre-1.63 name PlutusTx.Plugin is gone,
+-- so a -fplugin-opt aimed at that module would not reach the compiler.
+common plinth-options
+    import:             ghc-options
+    ghc-options:
+        -fobject-code
+        -fno-full-laziness
+        -fno-ignore-interface-pragmas
+        -fno-omit-interface-pragmas
+        -fno-spec-constr
+        -fno-specialise
+        -fno-strictness
+        -fno-unbox-small-strict-fields
+        -fno-unbox-strict-fields
+        -fplugin-opt=Plinth.Plugin:target-version=1.1.0
+        -fplugin-opt=Plinth.Plugin:preserve-logging
+
+-- CHaP releases. ^>=1.71 keeps us on the 1.71 line pinned by cabal.project.
+common plutus-deps
+    build-depends:
+        plutus-core ^>=1.71.0.0,
+        plutus-ledger-api ^>=1.71.0.0,
+        plutus-tx ^>=1.71.0.0,
+        plutus-tx-plugin ^>=1.71.0.0
 
 library
-    import:           warnings
+    import:           ghc-only-options
     exposed-modules:  MyLib
-
-    -- Work-in-progress modules, not yet part of the build: they need
-    -- the Plutus toolchain (plutus-ledger, cardano-api, plutus-tx),
-    -- which must be added via a pinned plutus-apps environment before
-    -- they can be listed here.
-    --   src/MintingMachine.hs
-    --   src/NFT.hs
-    --   src/Client.hs
-
+    -- MintingMachine and Client stay out of the build. They still import
+    -- plutus-apps (Ledger, Ledger.Typed.Scripts, Ledger.Constraints,
+    -- Plutus.Contract.StateMachine), which is archived. Porting them is a
+    -- later change; see the README.
     build-depends:    base >=4.14 && <5
     hs-source-dirs:   src
-    default-language: Haskell2010
+
+-- On-chain Plutus V3 code. Separate from the library above so the Plinth
+-- plugin and its optimisation flags apply only to modules that are compiled
+-- to Plutus Core.
+library nft-plinth
+    import:           plinth-options, plutus-deps
+    visibility:       public
+    hs-source-dirs:   src
+    exposed-modules:  NFT
+    build-depends:    base >=4.18 && <5
 
 executable nft-tools
-    import:           warnings
+    import:           ghc-only-options
     main-is:          Main.hs
     build-depends:
         base >=4.14 && <5,
         nft-tools
     hs-source-dirs:   app
-    default-language: Haskell2010
 
 executable generate-vending-machine
-    import:           warnings
+    import:           ghc-only-options
     main-is:          generate-vending-machine.hs
     build-depends:
         base >=4.14 && <5,
         nft-tools
     hs-source-dirs:   app
-    default-language: Haskell2010
 
 executable generate-airdrop
-    import:           warnings
+    import:           ghc-only-options
     main-is:          generate-airdrop.hs
     build-depends:
         base >=4.14 && <5,
         nft-tools
     hs-source-dirs:   app
-    default-language: Haskell2010
 
 executable ticket-sale
-    import:           warnings
+    import:           ghc-only-options
     main-is:          ticket-sale.hs
     build-depends:
         base >=4.14 && <5,
         nft-tools
     hs-source-dirs:   app
-    default-language: Haskell2010
+
+executable write-nft-policy
+    import:           ghc-only-options
+    main-is:          write-nft-policy.hs
+    hs-source-dirs:   app
+    build-depends:
+        base >=4.18 && <5,
+        base16-bytestring ^>=1.0,
+        bytestring,
+        nft-tools:nft-plinth,
+        plutus-ledger-api ^>=1.71.0.0,
+        text
 
 test-suite nft-tools-test
-    import:           warnings
+    import:           ghc-only-options
     type:             exitcode-stdio-1.0
-    main-is:          MyLibTest.hs
+    main-is:          NFTSpec.hs
     hs-source-dirs:   test
     build-depends:
-        base >=4.14 && <5,
-        nft-tools
-    default-language: Haskell2010
+        base >=4.18 && <5,
+        aeson,
+        bytestring,
+        mtl,
+        nft-tools:nft-plinth,
+        plutus-ledger-api ^>=1.71.0.0,
+        plutus-ledger-api:plutus-ledger-api-testlib,
+        plutus-tx ^>=1.71.0.0,
+        tasty,
+        tasty-hunit,
+        text
