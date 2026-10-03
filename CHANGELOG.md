@@ -15,3 +15,9 @@
   hard fork.
 * Add `write-nft-policy`, which writes a `PlutusScriptV3` text envelope, and
   replace the placeholder test suite with evaluation tests for the policy.
+* Port the vending machine to a Plutus V3 spending validator. A thread token
+  identifies the sale UTxO. The datum is the price and a fixed metadata
+  blob; the stock is the NFT quantity on the UTxO. Redeemers are SetPrice,
+  AddNFT, BuyNFT, and Withdraw, and Withdraw of the full balance burns the
+  thread token to close the machine. `write-vending-machine` writes the
+  script envelope.

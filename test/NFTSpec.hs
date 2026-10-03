@@ -5,7 +5,7 @@
 -- 'write-nft-policy' serialises; these tests do not reimplement the checks
 -- in Haskell.
 
-module Main (main) where
+module NFTSpec (nftTests) where
 
 import Control.Monad.Except (ExceptT, runExcept, runExceptT)
 import Control.Monad.Writer.Strict (Writer, runWriter)
@@ -57,11 +57,8 @@ import PlutusLedgerApi.V3
   )
 import PlutusLedgerApi.V3.MintValue (MintValue (UnsafeMintValue))
 import PlutusTx.AssocMap qualified as Map
-import Test.Tasty (TestTree, defaultMain, testGroup)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
-
-main :: IO ()
-main = defaultMain tests
 
 -- 'toBuiltin' is polymorphic, so the source has to be a concrete
 -- 'ByteString'. The ledger does not require these test values to be
@@ -84,8 +81,8 @@ otherSymbol = CurrencySymbol (b "other-policy")
 otherName :: TokenName
 otherName = TokenName (b "OTHER")
 
-tests :: TestTree
-tests =
+nftTests :: TestTree
+nftTests =
   testGroup
     "one-shot NFT policy"
     [ testCase "mints one token when the UTxO is spent" $
