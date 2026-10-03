@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Vending machine as a Plutus V3 spending validator.
 --
@@ -52,7 +53,6 @@ import PlutusTx
   ( BuiltinData
   , CompiledCode
   , FromData (fromBuiltinData)
-  , ToData (toBuiltinData)
   , UnsafeFromData (unsafeFromBuiltinData)
   , compile
   , liftCode
@@ -74,6 +74,7 @@ import PlutusTx.Prelude
   , (+)
   , (-)
   , (/=)
+  , (<=)
   , (>)
   , (>=)
   , (==)
@@ -131,20 +132,22 @@ mkVendingMachine
   -> Bool
 mkVendingMachine seller threadCs threadTn nftCs nftTn start end metadata rawCtx ctx =
   traceIfFalse "thread and nft collide" (threadCs /= nftCs || threadTn /= nftTn)
-    && withOwnOutput rawCtx $ \own ->
-      traceIfFalse "thread token missing" (qty threadCs threadTn (txOutValue own) == 1)
-      && traceIfFalse "thread token split" (inputThread (txInfoInputs info) == 1)
-      && traceIfFalse "nft minted" (assetMinted nftCs nftTn == 0)
-      && traceIfFalse "nft burned" (assetBurned nftCs nftTn == 0)
-      && withSale own $ \price meta ->
-        traceIfFalse "metadata mismatch" (meta == metadata)
-          && traceIfFalse "negative price" (price >= 0)
-          && case machineRedeemer ctx of
-            Nothing -> traceIfFalse "bad redeemer" False
-            Just (SetPrice p) -> setPrice own p
-            Just (AddNFT n) -> addNft own price n
-            Just (BuyNFT n) -> buy own price n
-            Just (Withdraw lovelaceAmt nftAmt) -> withdraw own price lovelaceAmt nftAmt
+    && ( withOwnOutput rawCtx $ \own ->
+          traceIfFalse "thread token missing" (qty threadCs threadTn (txOutValue own) == 1)
+            && traceIfFalse "thread token split" (inputThread (txInfoInputs info) == 1)
+            && traceIfFalse "nft minted" (assetMinted nftCs nftTn == 0)
+            && traceIfFalse "nft burned" (assetBurned nftCs nftTn == 0)
+            && ( withSale own $ \price meta ->
+                  traceIfFalse "metadata mismatch" (meta == metadata)
+                    && traceIfFalse "negative price" (price >= 0)
+                    && case machineRedeemer ctx of
+                      Nothing -> traceIfFalse "bad redeemer" False
+                      Just (SetPrice p) -> setPrice own p
+                      Just (AddNFT n) -> addNft own price n
+                      Just (BuyNFT n) -> buy own price n
+                      Just (Withdraw lovelaceAmt nftAmt) -> withdraw own price lovelaceAmt nftAmt
+               )
+       )
   where
     info :: TxInfo
     info = scriptContextTxInfo ctx
@@ -156,7 +159,7 @@ mkVendingMachine seller threadCs threadTn nftCs nftTn start end metadata rawCtx 
     assetBurned cs tn = valueOf (mintValueBurned (txInfoMint info)) cs tn
 
     qty :: CurrencySymbol -> TokenName -> Value -> Integer
-    qty = valueOf
+    qty cs tn v = valueOf v cs tn
 
     inputThread :: [TxInInfo] -> Integer
     inputThread [] = 0
@@ -242,43 +245,46 @@ mkVendingMachine seller threadCs threadTn nftCs nftTn start end metadata rawCtx 
     setPrice own newPrice =
       traceIfFalse "seller signature missing" signed
         && traceIfFalse "negative price" (newPrice >= 0)
-        && withContinue own $ \cont ->
-          withSale cont $ \p m ->
-            traceIfFalse "metadata mismatch" (m == metadata)
-              && traceIfFalse "price not updated" (p == newPrice)
-              && traceIfFalse "value changed" (sameValue (txOutValue own) (txOutValue cont))
-              && noScriptLeak (txOutAddress own) (txInfoOutputs info)
+        && ( withContinue own $ \cont ->
+              withSale cont $ \p m ->
+                traceIfFalse "metadata mismatch" (m == metadata)
+                  && traceIfFalse "price not updated" (p == newPrice)
+                  && traceIfFalse "value changed" (sameValue (txOutValue own) (txOutValue cont))
+                  && noScriptLeak (txOutAddress own) (txInfoOutputs info)
+           )
 
     addNft :: TxOut -> Integer -> Integer -> Bool
     addNft own price n =
       traceIfFalse "seller signature missing" signed
         && traceIfFalse "nothing added" (n > 0)
-        && withContinue own $ \cont ->
-          withSale cont $ \p m ->
-            let old = txOutValue own
-                new = txOutValue cont
-             in traceIfFalse "metadata mismatch" (m == metadata)
-                  && traceIfFalse "price changed" (p == price)
-                  && traceIfFalse "inventory not increased" (qty nftCs nftTn new == qty nftCs nftTn old + n)
-                  && traceIfFalse "ada decreased" (qty adaSymbol adaToken new >= qty adaSymbol adaToken old)
-                  && traceIfFalse "value changed" (othersHeld old new && othersHeld new old)
-                  && noScriptLeak (txOutAddress own) (txInfoOutputs info)
+        && ( withContinue own $ \cont ->
+              withSale cont $ \p m ->
+                let old = txOutValue own
+                    new = txOutValue cont
+                 in traceIfFalse "metadata mismatch" (m == metadata)
+                      && traceIfFalse "price changed" (p == price)
+                      && traceIfFalse "inventory not increased" (qty nftCs nftTn new == qty nftCs nftTn old + n)
+                      && traceIfFalse "ada decreased" (qty adaSymbol adaToken new >= qty adaSymbol adaToken old)
+                      && traceIfFalse "value changed" (othersHeld old new && othersHeld new old)
+                      && noScriptLeak (txOutAddress own) (txInfoOutputs info)
+           )
 
     buy :: TxOut -> Integer -> Integer -> Bool
     buy own price n =
       traceIfFalse "bad buy quantity" (n > 0)
         && traceIfFalse "outside sale interval" (inWindow (txInfoValidRange info))
-        && withContinue own $ \cont ->
-          withSale cont $ \p m ->
-            let old = txOutValue own
-                new = txOutValue cont
-             in traceIfFalse "metadata mismatch" (m == metadata)
-                  && traceIfFalse "price changed" (p == price)
-                  && traceIfFalse "not enough inventory" (n <= qty nftCs nftTn old)
-                  && traceIfFalse "insufficient payment" (qty adaSymbol adaToken new >= qty adaSymbol adaToken old + n * price)
-                  && traceIfFalse "nft shortfall" (qty nftCs nftTn new == qty nftCs nftTn old - n)
-                  && traceIfFalse "buyer did not receive NFT" (buyerGot (txOutAddress own) n)
-                  && traceIfFalse "value changed" (othersHeld old new && othersHeld new old)
+        && ( withContinue own $ \cont ->
+              withSale cont $ \p m ->
+                let old = txOutValue own
+                    new = txOutValue cont
+                 in traceIfFalse "metadata mismatch" (m == metadata)
+                      && traceIfFalse "price changed" (p == price)
+                      && traceIfFalse "not enough inventory" (n <= qty nftCs nftTn old)
+                      && traceIfFalse "insufficient payment" (qty adaSymbol adaToken new >= qty adaSymbol adaToken old + n * price)
+                      && traceIfFalse "nft shortfall" (qty nftCs nftTn new == qty nftCs nftTn old - n)
+                      && traceIfFalse "buyer did not receive NFT" (buyerGot (txOutAddress own) n)
+                      && traceIfFalse "value changed" (othersHeld old new && othersHeld new old)
+           )
 
     buyerGot :: Address -> Integer -> Bool
     buyerGot scriptAddr n =
@@ -315,16 +321,17 @@ mkVendingMachine seller threadCs threadTn nftCs nftTn start end metadata rawCtx 
           else
             traceIfFalse "bad withdraw" (lovelaceAmt >= 0 && nftAmt >= 0 && (lovelaceAmt > 0 || nftAmt > 0))
               && traceIfFalse "withdraw exceeds balance" (lovelaceAmt <= ada own && nftAmt <= stock own)
-              && withContinue own $ \cont ->
-                withSale cont $ \p m ->
-                  let old = txOutValue own
-                      new = txOutValue cont
-                   in traceIfFalse "metadata mismatch" (m == metadata)
-                        && traceIfFalse "price changed" (p == price)
-                        && traceIfFalse "withdraw exceeds balance" (qty adaSymbol adaToken new == ada own - lovelaceAmt)
-                        && traceIfFalse "withdraw exceeds balance" (qty nftCs nftTn new == stock own - nftAmt)
-                        && traceIfFalse "value changed" (othersHeld old new && othersHeld new old)
-                        && noScriptLeak (txOutAddress own) (txInfoOutputs info)
+              && ( withContinue own $ \cont ->
+                    withSale cont $ \p m ->
+                      let old = txOutValue own
+                          new = txOutValue cont
+                       in traceIfFalse "metadata mismatch" (m == metadata)
+                            && traceIfFalse "price changed" (p == price)
+                            && traceIfFalse "withdraw exceeds balance" (qty adaSymbol adaToken new == ada own - lovelaceAmt)
+                            && traceIfFalse "withdraw exceeds balance" (qty nftCs nftTn new == stock own - nftAmt)
+                            && traceIfFalse "value changed" (othersHeld old new && othersHeld new old)
+                            && noScriptLeak (txOutAddress own) (txInfoOutputs info)
+                 )
 
     close :: TxOut -> Integer -> Integer -> Bool
     close own lovelaceAmt nftAmt =
