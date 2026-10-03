@@ -1,9 +1,11 @@
 -- | Off-chain client for interacting with the NFT contracts.
 --
 -- Not part of the cabal build. plutus-apps 'Plutus.Contract' is archived,
--- so this will not grow a Contract monad. The next step is cardano-cli or
+-- so this will not grow a Contract monad. Transactions are cardano-cli or
 -- cardano-api: choose the one-shot UTxO, run write-nft-policy, and submit
--- the mint transaction. See the README.
+-- the mint. The vending machine is the spending validator in
+-- MintingMachine; this module still does not build its transactions.
+-- See the README.
 module Client
   (
   ) where

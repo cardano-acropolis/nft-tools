@@ -67,10 +67,8 @@ common plutus-deps
 library
     import:           ghc-only-options
     exposed-modules:  MyLib
-    -- MintingMachine and Client stay out of the build. They still import
-    -- plutus-apps (Ledger, Ledger.Typed.Scripts, Ledger.Constraints,
-    -- Plutus.Contract.StateMachine), which is archived. Porting them is a
-    -- later change; see the README.
+    -- Client stays out of the build. It does not construct transactions yet.
+    -- See the README.
     build-depends:    base >=4.14 && <5
     hs-source-dirs:   src
 
@@ -81,7 +79,9 @@ library nft-plinth
     import:           plinth-options, plutus-deps
     visibility:       public
     hs-source-dirs:   src
-    exposed-modules:  NFT
+    exposed-modules:
+        NFT
+        MintingMachine
     build-depends:    base >=4.18 && <5
 
 executable nft-tools
@@ -116,6 +116,18 @@ executable ticket-sale
         nft-tools
     hs-source-dirs:   app
 
+executable write-vending-machine
+    import:           ghc-only-options
+    main-is:          write-vending-machine.hs
+    hs-source-dirs:   app
+    build-depends:
+        base >=4.18 && <5,
+        base16-bytestring ^>=1.0,
+        bytestring,
+        nft-tools:nft-plinth,
+        plutus-ledger-api ^>=1.71.0.0,
+        text
+
 executable write-nft-policy
     import:           ghc-only-options
     main-is:          write-nft-policy.hs
@@ -131,7 +143,10 @@ executable write-nft-policy
 test-suite nft-tools-test
     import:           ghc-only-options
     type:             exitcode-stdio-1.0
-    main-is:          NFTSpec.hs
+    main-is:          Spec.hs
+    other-modules:
+        NFTSpec
+        VendingSpec
     hs-source-dirs:   test
     build-depends:
         base >=4.18 && <5,
