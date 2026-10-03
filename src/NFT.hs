@@ -22,7 +22,6 @@ import PlutusLedgerApi.V3
   ( CurrencySymbol
   , ScriptContext (..)
   , TokenName
-  , TxInInfo (..)
   , TxInfo (..)
   , TxOutRef
   , Value
@@ -35,9 +34,11 @@ import PlutusTx
   , CompiledCode
   , compile
   , liftCode
+  , toBuiltinData
   , unsafeApplyCode
   , unsafeFromBuiltinData
   )
+import PlutusTx.Builtins (equalsData, unsafeDataAsConstr, unsafeDataAsList)
 import PlutusTx.Prelude
   ( Bool (False, True)
   , BuiltinUnit
@@ -64,8 +65,14 @@ import PlutusTx.Prelude
 -- Tokens minted or burned under any other currency symbol are ignored, so
 -- this policy can share a transaction with another minting policy. Any other
 -- token name under this policy's own currency symbol is rejected.
-mkNFTPolicy :: TokenName -> TxOutRef -> ScriptContext -> Bool
-mkNFTPolicy tokenName utxo ctx =
+--
+-- @utxo@ is 'toBuiltinData' of the 'TxOutRef', and @ctxData@ is the raw
+-- script-context argument. Scott-encoding 'TxOutRef' and then matching it
+-- miscompiles in plutus-tx-plugin 1.71 ("instantiate a non-polymorphic
+-- term"). Walking the context 'Data' and comparing with 'equalsData' stays
+-- on builtins that evaluate from the Chang hard fork.
+mkNFTPolicy :: TokenName -> BuiltinData -> BuiltinData -> ScriptContext -> Bool
+mkNFTPolicy tokenName utxo ctxData ctx =
   case (ownEntries (mintValueMinted minted), ownEntries (mintValueBurned minted)) of
     ([(tn, amt)], [])
       | tn == tokenName && amt == 1 ->
@@ -101,20 +108,47 @@ mkNFTPolicy tokenName utxo ctx =
           | cs == ownSymbol = (tn, amt) : go rest
           | otherwise = go rest
 
-    -- Reference inputs do not count: the UTxO has to be spent.
+    -- Reference inputs do not count: the UTxO has to be spent. The context
+    -- is 'Constr 0 [txInfo, redeemer, scriptInfo]', 'TxInfo' is
+    -- 'Constr 0 [inputs, ...]', and each input is 'Constr 0 [outRef, ...]'.
+    -- That is the 'Data' encoding 'toData' produces for these types.
     hasUTxO :: Bool
-    hasUTxO = spends utxo (txInfoInputs info)
+    hasUTxO = spendsUTxO utxo ctxData
 
-    spends :: TxOutRef -> [TxInInfo] -> Bool
-    spends _ [] = False
-    spends wanted (i : rest) =
-      txInInfoOutRef i == wanted || spends wanted rest
+    -- Constructor indices are checked with '(==)'. Plinth cannot
+    -- pattern-match on an 'Integer'.
+    spendsUTxO :: BuiltinData -> BuiltinData -> Bool
+    spendsUTxO wanted rawCtx =
+      let (ctxIx, ctxFields) = unsafeDataAsConstr rawCtx
+       in if ctxIx == 0
+            then case ctxFields of
+              infoNode : _ ->
+                let (infoIx, infoFields) = unsafeDataAsConstr infoNode
+                 in if infoIx == 0
+                      then case infoFields of
+                        inputsNode : _ ->
+                          inputList wanted (unsafeDataAsList inputsNode)
+                        [] -> False
+                      else False
+              [] -> False
+            else False
+
+    inputList :: BuiltinData -> [BuiltinData] -> Bool
+    inputList _ [] = False
+    inputList wanted (inputData : rest) =
+      let (inputIx, inputFields) = unsafeDataAsConstr inputData
+       in if inputIx == 0
+            then case inputFields of
+              outRef : _ ->
+                equalsData wanted outRef || inputList wanted rest
+              [] -> inputList wanted rest
+            else inputList wanted rest
 
 -- | Plutus V3 entry point. The redeemer is inside 'ScriptContext' and is
 -- not used; the one-shot condition is the spent UTxO, not redeemer data.
-nftUntypedPolicy :: TokenName -> TxOutRef -> BuiltinData -> BuiltinUnit
-nftUntypedPolicy tokenName utxo ctx =
-  check (mkNFTPolicy tokenName utxo (unsafeFromBuiltinData ctx))
+nftUntypedPolicy :: TokenName -> BuiltinData -> BuiltinData -> BuiltinUnit
+nftUntypedPolicy tokenName utxo ctxData =
+  check (mkNFTPolicy tokenName utxo ctxData (unsafeFromBuiltinData ctxData))
 
 -- | Compile the policy and apply the token name and one-shot UTxO.
 --
@@ -126,4 +160,4 @@ nftPolicy :: TokenName -> TxOutRef -> CompiledCode (BuiltinData -> BuiltinUnit)
 nftPolicy tokenName utxo =
   $$(compile [||nftUntypedPolicy||])
     `unsafeApplyCode` liftCode plcVersion110 tokenName
-    `unsafeApplyCode` liftCode plcVersion110 utxo
+    `unsafeApplyCode` liftCode plcVersion110 (toBuiltinData utxo)

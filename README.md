@@ -38,6 +38,7 @@ This repo follows that Cabal + CHaP setup, which is the path verified here:
 | Plutus / Plinth | `plutus-tx`, `plutus-tx-plugin`, `plutus-ledger-api`, `plutus-core` `^>=1.71.0.0` |
 | Package index | Hackage `index-state` `2026-09-29T19:48:01Z` (plinth-template `main`). CHaP `2026-09-30T00:00:00Z` |
 | Plutus Core | 1.1.0 (`-fplugin-opt=Plinth.Plugin:target-version=1.1.0`) |
+| Datatypes | Scott encoding (`datatypes=ScottEncoding`), not the 1.71 sums-of-products default |
 | C libraries | `libsodium` (VRF-patched), `libsecp256k1`, `libblst`, via `get-crypto-libs.sh` |
 
 `cabal.project` records the CHaP repository and those index-states, so a
@@ -56,6 +57,18 @@ set. `PlutusTx.compile` still exists and registers `Plinth.Plugin`. The
 template's cabal file still passes `PlutusTx.Plugin:target-version=1.1.0`;
 that module was removed in plutus-tx-plugin 1.63, so the option has to name
 `Plinth.Plugin` or the compiler never sees it.
+
+The same 1.71 release compiles datatypes as sums-of-products by default.
+That encoding lowers pattern matches to `case` on built-in types, and
+casing on `Data` is rejected until Dijkstra (protocol version 12), which
+is not on mainnet. `datatypes=ScottEncoding` keeps the older builtins
+(`ifThenElse`, `chooseData`, and the rest), so the script deserialises and
+evaluates at Chang (protocol version 9). The tests call
+`evaluateScriptCounting` at `changPV` for that reason. Scott encoding of
+`TxOutRef` itself miscompiles in this plugin (equality and a pattern match
+both try to instantiate a `Data` constant), so the UTxO check walks the
+script context as `Data` and compares the out-ref with `equalsData`. The
+parameter is still the `toBuiltinData` encoding of the `TxOutRef`.
 
 Nix (`nix develop` from plinth-template's flake, GHC 9.6 by default or
 `nix develop .#ghc912`) is the other setup the same docs maintain. It is not

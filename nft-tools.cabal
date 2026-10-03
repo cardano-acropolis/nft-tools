@@ -34,6 +34,12 @@ common ghc-only-options
 -- (protocol version 9) onward. The plugin module is Plinth.Plugin;
 -- PlutusTx.compile registers it. The pre-1.63 name PlutusTx.Plugin is gone,
 -- so a -fplugin-opt aimed at that module would not reach the compiler.
+--
+-- datatypes=ScottEncoding: the 1.71 default is sums-of-products, which
+-- compiles pattern matches to 'case' on built-in types. Casing on Data
+-- is rejected until Dijkstra, so that default cannot run on current
+-- Conway. Scott encoding uses the older builtins (ifThenElse, chooseData,
+-- and so on) and evaluates from Chang.
 common plinth-options
     import:             ghc-options
     ghc-options:
@@ -48,6 +54,7 @@ common plinth-options
         -fno-unbox-strict-fields
         -fplugin-opt=Plinth.Plugin:target-version=1.1.0
         -fplugin-opt=Plinth.Plugin:preserve-logging
+        -fplugin-opt=Plinth.Plugin:datatypes=ScottEncoding
 
 -- CHaP releases. ^>=1.71 keeps us on the 1.71 line pinned by cabal.project.
 common plutus-deps

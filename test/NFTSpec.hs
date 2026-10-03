@@ -11,6 +11,7 @@ import Control.Monad.Except (ExceptT, runExcept, runExceptT)
 import Control.Monad.Writer.Strict (Writer, runWriter)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -29,20 +30,21 @@ import PlutusLedgerApi.Test.V3.EvaluationContext (costModelParamsForTesting)
 import PlutusLedgerApi.V1.Address (pubKeyHashAddress)
 import PlutusLedgerApi.V1.Crypto (PubKeyHash (PubKeyHash))
 import PlutusLedgerApi.V3
-  ( CurrencySymbol (CurrencySymbol)
+  ( BuiltinByteString
+  , CurrencySymbol (CurrencySymbol)
   , Data (Constr)
   , EvaluationContext
   , Lovelace (Lovelace)
   , OutputDatum (NoOutputDatum)
   , Redeemer (Redeemer)
-  , ScriptContext (ScriptContext)
+  , ScriptContext (..)
   , ScriptForEvaluation
   , ScriptInfo (MintingScript)
   , TokenName (TokenName)
   , TxId (TxId)
   , TxInInfo (TxInInfo)
-  , TxInfo (TxInfo)
-  , TxOut (TxOut)
+  , TxInfo (..)
+  , TxOut (..)
   , TxOutRef (TxOutRef)
   , always
   , dataToBuiltinData
@@ -61,20 +63,26 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 main :: IO ()
 main = defaultMain tests
 
+-- 'toBuiltin' is polymorphic, so the source has to be a concrete
+-- 'ByteString'. The ledger does not require these test values to be
+-- 32 bytes; cardano-cli does, and write-nft-policy enforces that.
+b :: BS.ByteString -> BuiltinByteString
+b = toBuiltin
+
 tokenName :: TokenName
-tokenName = TokenName (toBuiltin "NFT")
+tokenName = TokenName (b "NFT")
 
 utxo :: TxOutRef
-utxo = TxOutRef (TxId (toBuiltin "one-shot-utxo")) 0
+utxo = TxOutRef (TxId (b "one-shot-utxo")) 0
 
 ownSymbol :: CurrencySymbol
-ownSymbol = CurrencySymbol (toBuiltin "this-policy")
+ownSymbol = CurrencySymbol (b "this-policy")
 
 otherSymbol :: CurrencySymbol
-otherSymbol = CurrencySymbol (toBuiltin "other-policy")
+otherSymbol = CurrencySymbol (b "other-policy")
 
 otherName :: TokenName
-otherName = TokenName (toBuiltin "OTHER")
+otherName = TokenName (b "OTHER")
 
 tests :: TestTree
 tests =
@@ -153,7 +161,7 @@ context minted spent referenced =
 
     dummyOut =
       TxOut
-        { txOutAddress = pubKeyHashAddress (PubKeyHash (toBuiltin "holder"))
+        { txOutAddress = pubKeyHashAddress (PubKeyHash (b "holder"))
         , txOutValue = mempty
         , txOutDatum = NoOutputDatum
         , txOutReferenceScript = Nothing
@@ -173,7 +181,7 @@ baseTxInfo =
     , txInfoSignatories = []
     , txInfoRedeemers = Map.empty
     , txInfoData = Map.empty
-    , txInfoId = TxId (toBuiltin "tx")
+    , txInfoId = TxId (b "tx")
     , txInfoVotes = Map.empty
     , txInfoProposalProcedures = []
     , txInfoCurrentTreasuryAmount = Nothing
