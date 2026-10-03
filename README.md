@@ -36,12 +36,17 @@ This repo follows that Cabal + CHaP setup, which is the path verified here:
 | GHC | 9.6.7 (9.12.x is the other compiler the plugin allows; it has not been run here) |
 | Cabal | 3.16.1.0 (anything from 3.8 up matches the template) |
 | Plutus / Plinth | `plutus-tx`, `plutus-tx-plugin`, `plutus-ledger-api`, `plutus-core` `^>=1.71.0.0` |
-| Package index | CHaP `index-state` `2026-09-24`, Hackage `2026-09-29`, copied from plinth-template `main` |
+| Package index | Hackage `index-state` `2026-09-29T19:48:01Z` (plinth-template `main`). CHaP `2026-09-30T00:00:00Z` |
 | Plutus Core | 1.1.0 (`-fplugin-opt=Plinth.Plugin:target-version=1.1.0`) |
 | C libraries | `libsodium` (VRF-patched), `libsecp256k1`, `libblst`, via `get-crypto-libs.sh` |
 
 `cabal.project` records the CHaP repository and those index-states, so a
-later `cabal build` resolves the same package set.
+later `cabal build` resolves the same package set. The CHaP date is one day
+later than plinth-template `main`: that template still pins
+`2026-09-24T00:08:56Z`, and `plutus-tx-plugin` 1.71.0.0 was uploaded to CHaP
+on 2026-09-29, so the template pin cannot satisfy the `^>=1.71.0.0` bounds
+the template itself declares. `2026-09-30T00:00:00Z` is the first midnight
+after that upload.
 
 The plugin's default target in 1.71 is Plutus Core 1.2.0. A Plutus V3 script
 at that version fails to deserialise until the Dijkstra hard fork (major

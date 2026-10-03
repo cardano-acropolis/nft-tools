@@ -26,8 +26,12 @@ index-state:
   -- packages. Keep the CHaP line in sync with the plutus version bounds in
   -- nft-tools.cabal. The leading commas are required by cabal.project.
   , hackage.haskell.org 2026-09-29T19:48:01Z
-  -- Bump this when taking a newer plutus release from CHaP.
-  , cardano-haskell-packages 2026-09-24T00:08:56Z
+  -- plinth-template main still pins CHaP at 2026-09-24T00:08:56Z, which is
+  -- before plutus 1.71.0.0 was uploaded (2026-09-29T22:14Z). That pin cannot
+  -- resolve the ^>=1.71.0.0 bounds the same template declares. This is the
+  -- first midnight after that upload, so 1.71 is visible and later CHaP
+  -- revisions are not.
+  , cardano-haskell-packages 2026-09-30T00:00:00Z
 
 packages:
   ./.
