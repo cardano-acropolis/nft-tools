@@ -73,7 +73,14 @@ the VRF-patched build.
 
 ## Building
 
-GHC 9.6.7 and Cabal 3.8 or newer, plus `pkg-config`, `curl`, and `tar`.
+GHC 9.6.7 and Cabal 3.8 or newer, plus `pkg-config`, `curl`, `tar`, and
+the C development libraries GHC links against (`libgmp-dev`; `libncurses-dev`
+for `libtinfo`). On Debian or Ubuntu:
+
+```sh
+sudo apt-get install pkg-config curl tar libgmp-dev libncurses-dev
+```
+
 With [ghcup](https://www.haskell.org/ghcup/):
 
 ```sh
