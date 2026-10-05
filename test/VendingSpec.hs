@@ -225,14 +225,16 @@ mintRows rows =
 -- 'machineRef'. Used to validate the second machine of one drop.
 toCtxAt :: TxOutRef -> Scene -> ScriptContext
 toCtxAt ref scene =
-  ctx
-    { scriptContextTxInfo = tx{txInfoInputs = TxInInfo ref spent : extras}
-    , scriptContextScriptInfo = SpendingScript ref Nothing
-    }
+  case txInfoInputs tx of
+    TxInInfo _ spent : extras ->
+      ctx
+        { scriptContextTxInfo = tx{txInfoInputs = TxInInfo ref spent : extras}
+        , scriptContextScriptInfo = SpendingScript ref Nothing
+        }
+    [] -> error "toCtxAt: scene has no inputs"
   where
     ctx = toCtx scene
     tx = scriptContextTxInfo ctx
-    TxInInfo _ spent : extras = txInfoInputs tx
 
 -- | Re-run a transaction that already contains @ref@ as the script purpose
 -- for that machine's own redeemer.

@@ -44,6 +44,7 @@ import PlutusTx.Prelude
   , BuiltinUnit
   , Integer
   , check
+  , otherwise
   , traceIfFalse
   , (&&)
   , (>)
