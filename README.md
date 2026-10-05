@@ -3,7 +3,8 @@
 Tools for working with and issuing NFTs on Cardano.
 
 On-chain code is Plinth (PlutusTx), compiled to Plutus V3 for the Conway
-era. The off-chain client does not build transactions yet.
+era. `nft-client` builds unsigned Conway transactions for a multi-machine
+drop. You sign them with `cardano-cli`.
 
 ## Status
 
@@ -15,11 +16,11 @@ era. The off-chain client does not build transactions yet.
 | Thread-token family | `src/ThreadFamily.hs` | Mints one token name per machine under a shared policy id |
 | `write-vending-machine` | `app/write-vending-machine.hs` | Writes a `cardano-cli` `PlutusScriptV3` text envelope |
 | `write-thread-family` | `app/write-thread-family.hs` | Writes the thread-token minting policy envelope |
-| Off-chain client | `src/Client.hs` | Not in the build. Does not construct transactions |
-| `generate-vending-machine` | `app/generate-vending-machine.hs` | CLI skeleton. Does not build sale transactions |
+| Off-chain client | `offchain/Client.hs`, `app/nft-client.hs` | Builds unsigned `TxBodyConway` bodies: mint, open, seed, set-price, buy, withdraw, close, rebalance |
+| `generate-vending-machine` | `app/generate-vending-machine.hs` | Still a stub. Sale transactions are `nft-client` |
 | `generate-airdrop` | `app/generate-airdrop.hs` | Stub |
 | `ticket-sale` | `app/ticket-sale.hs` | Stub. The minting policy now allows a later burn |
-| Test suite | `test/Spec.hs` | Evaluates the policies and the vending machine on hand-built V3 script contexts |
+| Test suite | `test/Spec.hs` | Evaluates the scripts, and checks the built transactions without a node |
 
 ## Toolchain
 
@@ -109,9 +110,13 @@ cabal test
 ```
 
 Source `dist-newstyle/crypto-libs/env.sh` in every shell you build or run
-from. On Linux it puts the C libraries on `PKG_CONFIG_PATH` and
-`LD_LIBRARY_PATH`; without the latter, running a built executable fails to
-load `libblst.so`.
+from. On Linux it puts the C libraries on `PKG_CONFIG_PATH`,
+`LIBRARY_PATH`, and `LD_LIBRARY_PATH`. `LIBRARY_PATH` is what the link
+step uses to find `libsodium`. Without `LD_LIBRARY_PATH`, running a built
+executable fails to load `libblst.so`. `cabal.project` turns off
+`cardano-crypto-praos`'s `external-libsodium-vrf` flag so that package
+compiles its own VRF code. The libsodium from `get-crypto-libs.sh` does
+not export those symbols.
 
 ## One-shot policy
 
@@ -186,9 +191,12 @@ fails. Datum hashes are rejected; the output datum has to be inline.
 | `BuyNFT` | 2 | count, greater than 0 | nobody | see below |
 | `Withdraw` | 3 | lovelace, NFT count | seller | remove exactly those amounts, or close the machine |
 
-`BuyNFT` requires the transaction validity range to be a finite closed
-interval whose ends both sit inside the sale window (inclusive). An
-`always` range, an open bound, or a range that sticks out of the window
+`BuyNFT` requires the transaction validity range to be finite, with both
+ends inside the sale window. A fully closed interval is accepted. Conway's
+ledger translation is closed at the start and open at the end
+(`invalidHereafter` is `strictUpperBound`), and that shape is accepted
+when every included millisecond is still inside the window. An `always`
+range, an open lower bound, or a range that sticks out of the window
 fails. The machine's ada must rise by at least `count * price` (overpaying
 is allowed, and a price of 0 is allowed). The machine's NFT quantity drops
 by `count`. Outputs that do not carry this machine's thread token must
@@ -260,19 +268,158 @@ drift the same way: `SetPrice` updates only the machine being spent, so
 set it on each machine that should change. An idle machine can stay open
 at price 0, or the seller can close it by burning its thread token.
 
-## What is next
+## Off-chain client
 
-`src/Client.hs` was a placeholder for the plutus-apps `Contract` monad
-(`getUnspentOutput` to choose the UTxO). That monad is gone with
-plutus-apps. The off-chain side is cardano-cli or cardano-api: run
-`write-thread-family`, mint one token name per machine, run
-`write-vending-machine`, and submit `SetPrice`, `AddNFT`, `BuyNFT`, and
-`Withdraw` against that envelope. This repo does not build those
-transactions yet.
+`nft-client` builds the transactions. The library is `offchain/Client.hs`,
+not under `src/`, so the Plinth plugin is not applied to ledger code and the
+validators are not compiled a second time. It does not query a node, sign, or
+submit. The file it writes is a `TxBodyConway` text envelope (`type`,
+`description`, `cborHex`) that `cardano-cli conway transaction sign`
+accepts. Key witnesses are absent: there is no mnemonic file and no
+hardware-wallet backend. `cardano-api` is not used. The newest release at
+this CHaP pin (11.7) depends on `plutus-ledger-api ^>=1.70`, which excludes
+the 1.71 line the scripts use. `cardano-ledger-conway` 1.23 accepts 1.71.
+Release 1.24 is dated after the pin, so the solver never sees it.
 
-`generate-vending-machine`, `generate-airdrop`, and `ticket-sale` are still
-stubs on the `MyLib` placeholder. The minting policy already authorizes a
-later burn, which a redemption transaction would use.
+`generate-airdrop` and `ticket-sale` are still stubs. The minting policy
+already authorizes a later burn, which a redemption transaction would use.
+`generate-vending-machine` does not build sale transactions either.
+
+### Node, socket, and magic
+
+Point `cardano-cli` at the node. The client never opens the socket.
+
+```sh
+export CARDANO_NODE_SOCKET_PATH=/path/to/node.socket
+# Preview magic is 2, preprod is 1. Mainnet is --mainnet.
+# The client does not hard-code a magic number.
+cardano-cli conway query protocol-parameters \
+  --socket-path "$CARDANO_NODE_SOCKET_PATH" \
+  --testnet-magic 2 \
+  --out-file pparams.json
+cardano-cli conway query utxo \
+  --address "$(cat payment.addr)" \
+  --socket-path "$CARDANO_NODE_SOCKET_PATH" \
+  --testnet-magic 2
+```
+
+`--network testnet` (the default) or `--network mainnet` is the Shelley
+address tag on the outputs, not the network magic. A preview or preprod
+address uses `testnet`.
+
+A buy's `--invalid-before` and `--invalid-hereafter` are slot numbers.
+Conway turns that pair into a closed lower bound and an open upper bound.
+Both ends have to land inside the sale's POSIX window. Convert slots with
+the node's system start and slot length (`cardano-cli conway query
+system-start`). The client does not do that conversion.
+
+The script integrity hash covers the cost models in `--protocol-params`.
+Use the file from the node you will submit to. `--mem` and `--cpu` are
+copied onto every redeemer (defaults 14000000 and 10000000000). Those
+defaults are a placeholder budget: they make the printed minimum fee large,
+and a node will reject the script if the real cost is higher than the
+budget you attached. Measure units against the node and pass them in, then
+rebuild if the printed minimum exceeds `--fee`.
+
+### Envelopes
+
+Compile the three scripts first. Pass the files the writers emit. The
+client reads `cborHex` and hashes those bytes; it does not recompile.
+
+```sh
+cabal run write-nft-policy -- "SALE" <64-hex-tx-id> 0 nft.plutus
+cabal run write-thread-family -- <64-hex-tx-id> 0 family.plutus
+cabal run write-vending-machine -- \
+  <56-hex-seller-pkh> <56-hex-thread-policy> \
+  <56-hex-nft-policy> SALE \
+  1700000000000 1700086400000 "drop" machine.plutus
+```
+
+Hashes are hex with no `0x`. Payment key hashes and policy ids are 28
+bytes. Transaction ids are 32 bytes. Addresses are `key:HEX` or
+`script:HEX` and have no staking credential. An input is `TXID#INDEX`. A
+token is `POLICY_HEX:NAME:QTY`.
+
+### Seller flow
+
+`nft-client help` prints every flag. The shape of a mint, then one machine,
+is:
+
+```sh
+cabal run nft-client -- mint-nft \
+  --protocol-params pparams.json --network testnet \
+  --script nft.plutus --nft-name SALE \
+  --one-shot TXID#0 --one-shot-lovelace 5000000 --one-shot-address key:SELLER \
+  --dest key:SELLER --out-lovelace 2000000 \
+  --cip25-name "Ticket" --cip25-image "ipfs://..." \
+  --cip25-media-type "image/png" --cip25-description "a ticket" \
+  --fee-in TXID#1 --fee-in-lovelace 10000000 --fee-in-address key:SELLER \
+  --collateral TXID#2 --fee 200000 --change key:SELLER \
+  --out-file mint-nft.txbody
+
+cabal run nft-client -- mint-threads \
+  --protocol-params pparams.json --script family.plutus \
+  --thread-name THREAD --thread-name THREAD-B \
+  --one-shot TXID#0 --one-shot-lovelace 5000000 --one-shot-address key:SELLER \
+  --dest key:SELLER --out-lovelace 2000000 \
+  --fee 200000 --change key:SELLER --out-file mint-threads.txbody
+
+cabal run nft-client -- open \
+  --protocol-params pparams.json --machine-script machine.plutus \
+  --thread-policy THREAD_POLICY --thread-name THREAD \
+  --nft-policy NFT_POLICY --nft-name SALE \
+  --count 2 --price 100 --metadata-utf8 drop --lock-lovelace 2000000 \
+  --wallet TXID#0 --wallet-lovelace 5000000 --wallet-address key:SELLER \
+  --wallet-token THREAD_POLICY:THREAD:1 --wallet-token NFT_POLICY:SALE:2 \
+  --fee 200000 --change key:SELLER --out-file open.txbody
+```
+
+`open` locks a fresh machine. The validator does not run. `seed` is
+`AddNFT` on a machine that already exists (`--machine`, `--seller`,
+`--wallet` holding the extra NFTs). `set-price`, `buy`, `withdraw`, and
+`close` each name one machine UTxO (`--machine TXID#IX --machine-lovelace
+--machine-nfts`). `buy` also needs `--pay`, `--buyer`, `--out-lovelace`,
+and both slot bounds. `close` adds `--thread-script family.plutus` and
+burns that machine's thread token. `rebalance` is `Withdraw` of NFTs from
+`--from` and `AddNFT` of the same count on `--to`, in one seller
+transaction. Ada on both machines stays put.
+
+After each body:
+
+```sh
+cardano-cli conway transaction sign \
+  --tx-body-file open.txbody \
+  --signing-key-file payment.skey \
+  --out-file open.tx
+cardano-cli conway transaction submit \
+  --socket-path "$CARDANO_NODE_SOCKET_PATH" \
+  --testnet-magic 2 \
+  --tx-file open.tx
+```
+
+### CIP-25
+
+`--cip25-name` and `--cip25-image` (optional `--cip25-media-type` and
+`--cip25-description`) attach metadata label 721 on `mint-nft` and
+`mint-threads`. The map is `policy id -> token name -> {name, image, ...}`
+plus `version: 1.0`, which is CIP-25 version 1. The policy id is the hex
+script hash. The token name is the UTF-8 text, not hex. Plutus V3
+validators do not receive transaction metadata, so this map is off-chain
+only. The bytes in `--metadata-utf8` are the `SaleState` datum and must
+equal the metadata parameter of `write-vending-machine`.
+
+### What still needs a live node
+
+The unit tests build these transactions and inspect inputs, mint, datums,
+redeemers, CIP-25, and the envelope. They do not need a node. Submitting
+does. You still have to query UTxOs and protocol parameters, choose slots
+inside the sale window, supply a measured Plutus budget, sign, and submit.
+If `--fee` is below the printed ledger minimum, rebuild the body.
+
+## What is left
+
+`generate-airdrop` and `ticket-sale` remain stubs. A redemption flow would
+burn the sale NFT with the policy that already allows that burn.
 
 ## Notes
 

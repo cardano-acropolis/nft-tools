@@ -113,9 +113,10 @@ $(makeIsDataIndexed ''MachineRedeemer [('SetPrice, 0), ('AddNFT, 1), ('BuyNFT, 2
 -- * 'AddNFT' — seller's signature, inventory increases by that count, ada
 --   does not decrease.
 -- * 'BuyNFT' — this transaction touches no other thread token. The validity
---   range is a finite closed interval inside the sale window, this
---   machine's ada rises by at least @n * price@, and outputs that are not
---   this script receive exactly @n@ of the NFT.
+--   range is finite and sits inside the sale window (closed on both ends,
+--   or closed below and open above, which is what Conway puts on chain),
+--   this machine's ada rises by at least @n * price@, and outputs that are
+--   not this script receive exactly @n@ of the NFT.
 -- * 'Withdraw' — seller's signature. See 'MachineRedeemer'.
 --
 -- The sale NFT must not be minted or burned here. Inventory moves between
@@ -196,12 +197,20 @@ mkVendingMachine seller threadCs nftCs nftTn start end metadata rawCtx ctx =
         countOutputs (o : rest) =
           qty threadCs machineTn (txOutValue o) + countOutputs rest
 
-    -- The sale window is inclusive. The tx validity range has to be finite
-    -- and closed, and both ends have to sit inside that window. An open or
-    -- infinite range is rejected, so a buyer cannot leave one end unbounded.
+    -- The sale window is inclusive. Both ends of the validity range have to
+    -- be finite, and the buyer cannot leave either end unbounded.
+    --
+    -- A fully closed interval is the shape the unit tests build by hand.
+    -- Conway's ledger translation (transValidityInterval) does not produce
+    -- that shape: invalidBefore becomes a closed lower bound and
+    -- invalidHereafter becomes an open upper bound (strictUpperBound).
+    -- The open form is accepted when every included millisecond still sits
+    -- inside the window, which is hi - 1 <= end.
     inWindow :: POSIXTimeRange -> Bool
     inWindow (Interval (LowerBound (Finite (POSIXTime lo)) True) (UpperBound (Finite (POSIXTime hi)) True)) =
       lo >= getPOSIXTime start && hi <= getPOSIXTime end
+    inWindow (Interval (LowerBound (Finite (POSIXTime lo)) True) (UpperBound (Finite (POSIXTime hi)) False)) =
+      lo >= getPOSIXTime start && hi > lo && hi - 1 <= getPOSIXTime end
     inWindow _ = False
 
     signed :: Bool

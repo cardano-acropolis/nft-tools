@@ -39,3 +39,9 @@ packages:
 -- The plugin links against the GHC API and is not built with profiling.
 package plutus-tx-plugin
   profiling: False
+
+-- cardano-crypto-praos 2.2.4 defaults to a libsodium fork that exports the
+-- VRF symbols. The libsodium from iohk-nix v3.1 does not. The package ships
+-- the same C code and can compile it against that libsodium instead.
+package cardano-crypto-praos
+  flags: -external-libsodium-vrf
