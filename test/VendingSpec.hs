@@ -90,6 +90,12 @@ threadCs = CurrencySymbol (b "thread-policy")
 threadTn :: TokenName
 threadTn = TokenName (b "THREAD")
 
+threadB :: TokenName
+threadB = TokenName (b "THREAD-B")
+
+refB :: TxOutRef
+refB = TxOutRef (TxId (b "machine-b")) 0
+
 nftCs :: CurrencySymbol
 nftCs = CurrencySymbol (b "nft-policy")
 
@@ -215,6 +221,30 @@ mintRows rows =
   UnsafeMintValue
     (Map.unsafeFromList [(cs, Map.unsafeFromList quantities) | (cs, quantities) <- rows])
 
+-- | Same as 'toCtx', but the spent machine input carries @ref@ instead of
+-- 'machineRef'. Used to validate the second machine of one drop.
+toCtxAt :: TxOutRef -> Scene -> ScriptContext
+toCtxAt ref scene =
+  case txInfoInputs tx of
+    TxInInfo _ spent : extras ->
+      ctx
+        { scriptContextTxInfo = tx{txInfoInputs = TxInInfo ref spent : extras}
+        , scriptContextScriptInfo = SpendingScript ref Nothing
+        }
+    [] -> error "toCtxAt: scene has no inputs"
+  where
+    ctx = toCtx scene
+    tx = scriptContextTxInfo ctx
+
+-- | Re-run a transaction that already contains @ref@ as the script purpose
+-- for that machine's own redeemer.
+spendAs :: TxOutRef -> MachineRedeemer -> ScriptContext -> ScriptContext
+spendAs ref redeemer ctx =
+  ctx
+    { scriptContextRedeemer = Redeemer (toBuiltinData redeemer)
+    , scriptContextScriptInfo = SpendingScript ref Nothing
+    }
+
 toCtx :: Scene -> ScriptContext
 toCtx scene =
   ScriptContext
@@ -268,6 +298,86 @@ buyOk n paid =
         [ continue (lovelace0 + paid) (stock0 - n) state0
         , pkhOut buyer (singleton nftCs nftTn n)
         ]
+    }
+
+holdNamed :: TokenName -> Integer -> Integer -> Value
+holdNamed tn ada nfts =
+  singleton adaSymbol adaToken ada
+    <> singleton threadCs tn 1
+    <> singleton nftCs nftTn nfts
+
+sibling :: Integer -> Integer -> SaleState -> TxOut
+sibling ada nfts st = machineOut machineAddr (holdNamed threadB ada nfts) (inline st)
+
+buyNamed :: TokenName -> Integer -> Integer -> Scene
+buyNamed tn n paid =
+  (buyOk n paid)
+    { sceneInValue = holdNamed tn lovelace0 stock0
+    , sceneOuts =
+        [ machineOut
+            machineAddr
+            (holdNamed tn (lovelace0 + paid) (stock0 - n))
+            (inline state0)
+        , pkhOut buyer (singleton nftCs nftTn n)
+        ]
+    }
+
+twoBuys :: Integer -> Scene
+twoBuys paid =
+  (buyOk 1 paid)
+    { sceneExtraIns = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+    , sceneOuts =
+        [ continue (lovelace0 + paid) (stock0 - 1) state0
+        , sibling (lovelace0 + paid) (stock0 - 1) state0
+        , pkhOut buyer (singleton nftCs nftTn 2)
+        ]
+    }
+
+rebalance :: Scene
+rebalance =
+  (withdrawOk 0 2)
+    { sceneExtraIns = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+    , sceneOuts =
+        [ continue lovelace0 (stock0 - 2) state0
+        , sibling lovelace0 (stock0 + 2) state0
+        ]
+    }
+
+seedSecond :: Scene
+seedSecond =
+  (setPriceOk 250)
+    { sceneExtraIns = [TxInInfo refB (sibling lovelace0 1 state0)]
+    , sceneOuts =
+        [ continue lovelace0 stock0 (SaleState 250 metadata)
+        , sibling lovelace0 5 state0
+        ]
+    }
+
+withdrawBoth :: Scene
+withdrawBoth =
+  (withdrawOk 1000000 0)
+    { sceneExtraIns = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+    , sceneOuts =
+        [ continue (lovelace0 - 1000000) stock0 state0
+        , sibling (lovelace0 - 500000) stock0 state0
+        , pkhOut seller (singleton adaSymbol adaToken 1000000)
+        , pkhOut seller (singleton adaSymbol adaToken 500000)
+        ]
+    }
+
+closeOne :: Scene
+closeOne =
+  closeOk
+    { sceneExtraIns = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+    , sceneOuts = payout lovelace0 stock0 ++ [sibling lovelace0 stock0 (SaleState 250 metadata)]
+    }
+
+closeBoth :: Scene
+closeBoth =
+  closeOk
+    { sceneExtraIns = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+    , sceneMint = mintRows [(threadCs, [(threadTn, -1), (threadB, -1)])]
+    , sceneOuts = payout lovelace0 stock0 ++ payout lovelace0 stock0
     }
 
 vendingTests :: TestTree
@@ -587,6 +697,57 @@ vendingTests =
               (_, Right budget) ->
                 assertFailure $ "expected the script to fail, got success " <> show budget
         ]
+    , testGroup
+        "parallel machines"
+        [ testCase "sells from a second machine in its own transaction" $ do
+            fails
+              "not enough inventory"
+              (buyOk 2 (2 * price)){sceneInValue = hold lovelace0 1}
+            assertOk (toCtxAt refB (buyNamed threadB 1 price))
+        , testCase "ignores another machine locked on a reference input" $
+            assertOk
+              ( toCtx
+                  (buyOk 1 price)
+                    { sceneRefs = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+                    }
+              )
+        , testCase "rejects two BuyNFT inputs in one transaction" $ do
+            let scene = twoBuys price
+            assertFailsWith "buy shares a transaction" (toCtx scene)
+            assertFailsWith "buy shares a transaction" (spendAs refB (BuyNFT 1) (toCtx scene))
+        , testCase "rejects merging two machines onto one output" $
+            fails
+              "machines merged"
+              (setPriceOk 250)
+                { sceneExtraIns = [TxInInfo refB (sibling lovelace0 stock0 state0)]
+                , sceneOuts =
+                    [ machineOut
+                        machineAddr
+                        (hold lovelace0 stock0 <> singleton threadCs threadB 1)
+                        (inline (SaleState 250 metadata))
+                    ]
+                }
+        , testCase "splits inventory from one machine onto another" $ do
+            let scene = rebalance
+            assertOk (toCtx scene)
+            assertOk (spendAs refB (AddNFT 2) (toCtx scene))
+        , testCase "seeds a second machine while the first changes price" $ do
+            let scene = seedSecond
+            assertOk (toCtx scene)
+            assertOk (spendAs refB (AddNFT 4) (toCtx scene))
+        , testCase "withdraws from each machine in one transaction" $ do
+            let scene = withdrawBoth
+            assertOk (toCtx scene)
+            assertOk (spendAs refB (Withdraw 500000 0) (toCtx scene))
+        , testCase "closes one machine and updates the other" $ do
+            let scene = closeOne
+            assertOk (toCtx scene)
+            assertOk (spendAs refB (SetPrice 250) (toCtx scene))
+        , testCase "closes two machines in one transaction" $ do
+            let scene = closeBoth
+            assertOk (toCtx scene)
+            assertOk (spendAs refB (Withdraw lovelace0 stock0) (toCtx scene))
+        ]
     , testCase "serialises a PlutusScriptV3 text envelope" envelopeTest
     ]
 
@@ -643,23 +804,23 @@ baseTxInfo =
     , txInfoTreasuryDonation = Nothing
     }
 
-loadScript :: CurrencySymbol -> TokenName -> ScriptForEvaluation
-loadScript cs tn =
+loadScript :: CurrencySymbol -> ScriptForEvaluation
+loadScript cs =
   case runExcept
     ( deserialiseScript
         changPV
         ( serialiseCompiledCode
-            (vendingMachine seller cs tn nftCs nftTn saleStart saleEnd metadata)
+            (vendingMachine seller cs nftCs nftTn saleStart saleEnd metadata)
         )
     ) of
     Left err -> error ("deserialiseScript: " <> show err)
     Right script -> script
 
 machineScript :: ScriptForEvaluation
-machineScript = loadScript threadCs threadTn
+machineScript = loadScript threadCs
 
 collidedScript :: ScriptForEvaluation
-collidedScript = loadScript nftCs nftTn
+collidedScript = loadScript nftCs
 
 evaluationContext :: EvaluationContext
 evaluationContext =
@@ -703,7 +864,7 @@ assertFailsWith message ctx =
 
 envelopeTest :: IO ()
 envelopeTest = do
-  let code = vendingMachine seller threadCs threadTn nftCs nftTn saleStart saleEnd metadata
+  let code = vendingMachine seller threadCs nftCs nftTn saleStart saleEnd metadata
       value = compiledCodeEnvelope "vending machine" code
       encoded = Aeson.encode value
   field "type" value @?= Just (Aeson.String "PlutusScriptV3")
