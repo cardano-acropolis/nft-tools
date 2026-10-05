@@ -418,6 +418,26 @@ vendingTests =
             assertOk (toCtx (buyOk 1 (price + 40)))
         , testCase "buys across the whole closed window" $
             assertOk (toCtx ((buyOk 1 price){sceneRange = closed saleStart saleEnd}))
+        , testCase "buys on the half-open range Conway puts on chain" $
+            assertOk
+              ( toCtx
+                  (buyOk 1 price)
+                    { sceneRange =
+                        Interval
+                          (LowerBound (Finite saleStart) True)
+                          (UpperBound (Finite (POSIXTime 2001)) False)
+                    }
+              )
+        , testCase "buys when the open upper bound ends on the window" $
+            assertOk
+              ( toCtx
+                  (buyOk 1 price)
+                    { sceneRange =
+                        Interval
+                          (LowerBound (Finite saleStart) True)
+                          (UpperBound (Finite (POSIXTime 5001)) False)
+                    }
+              )
         , testCase "allows another policy to mint during a buy" $
             assertOk
               ( toCtx
@@ -543,6 +563,24 @@ vendingTests =
                     Interval
                       (LowerBound (Finite (POSIXTime 1000)) False)
                       (UpperBound (Finite (POSIXTime 2000)) True)
+                }
+        , testCase "rejects a half-open buy that includes time past the end" $
+            fails
+              "outside sale interval"
+              (buyOk 1 price)
+                { sceneRange =
+                    Interval
+                      (LowerBound (Finite saleStart) True)
+                      (UpperBound (Finite (POSIXTime 5002)) False)
+                }
+        , testCase "rejects an empty half-open buy" $
+            fails
+              "outside sale interval"
+              (buyOk 1 price)
+                { sceneRange =
+                    Interval
+                      (LowerBound (Finite saleStart) True)
+                      (UpperBound (Finite saleStart) False)
                 }
         , testCase "rejects a non-positive buy" $
             fails "bad buy quantity" (buyOk 1 price){sceneRedeemer = BuyNFT 0}

@@ -67,10 +67,39 @@ common plutus-deps
 library
     import:           ghc-only-options
     exposed-modules:  MyLib
-    -- Client stays out of the build. It does not construct transactions yet.
-    -- See the README.
     build-depends:    base >=4.14 && <5
     hs-source-dirs:   src
+
+-- Off-chain transaction builders. Not compiled with the Plinth plugin:
+-- cardano-api 11.7 (the newest release at this CHaP pin) depends on
+-- plutus-ledger-api ^>=1.70, which excludes 1.71. cardano-ledger-conway
+-- 1.23 (newest at this CHaP pin; 1.24 is dated 2026-10-01) accepts
+-- plutus-ledger-api 1.71, so Conway tx bodies are built with that package
+-- instead of the archived plutus-apps Contract monad.
+library nft-offchain
+    import:           ghc-only-options
+    visibility:       public
+    hs-source-dirs:   offchain
+    exposed-modules:  Client
+    build-depends:
+        base >=4.18 && <5,
+        aeson,
+        base16-bytestring ^>=1.0,
+        bytestring,
+        cardano-crypto-class,
+        cardano-ledger-allegra,
+        cardano-ledger-alonzo,
+        cardano-ledger-binary,
+        cardano-ledger-conway ^>=1.23.0.0,
+        cardano-ledger-core,
+        cardano-ledger-mary,
+        cardano-strict-containers,
+        containers,
+        microlens,
+        nft-tools:nft-plinth,
+        plutus-ledger-api ^>=1.71.0.0,
+        plutus-tx ^>=1.71.0.0,
+        text
 
 -- On-chain Plutus V3 code. Separate from the library above so the Plinth
 -- plugin and its optimisation flags apply only to modules that are compiled
@@ -140,6 +169,19 @@ executable write-vending-machine
         plutus-ledger-api ^>=1.71.0.0,
         text
 
+executable nft-client
+    import:           ghc-only-options
+    main-is:          nft-client.hs
+    hs-source-dirs:   app
+    build-depends:
+        base >=4.18 && <5,
+        aeson,
+        base16-bytestring ^>=1.0,
+        bytestring,
+        containers,
+        nft-tools:nft-offchain,
+        text
+
 executable write-nft-policy
     import:           ghc-only-options
     main-is:          write-nft-policy.hs
@@ -157,6 +199,7 @@ test-suite nft-tools-test
     type:             exitcode-stdio-1.0
     main-is:          Spec.hs
     other-modules:
+        ClientSpec
         NFTSpec
         ThreadFamilySpec
         VendingSpec
@@ -164,12 +207,16 @@ test-suite nft-tools-test
     build-depends:
         base >=4.18 && <5,
         aeson,
+        base16-bytestring ^>=1.0,
         bytestring,
+        containers,
         mtl,
+        nft-tools:nft-offchain,
         nft-tools:nft-plinth,
         plutus-ledger-api ^>=1.71.0.0,
         plutus-ledger-api:plutus-ledger-api-testlib,
         plutus-tx ^>=1.71.0.0,
         tasty,
         tasty-hunit,
+        tasty-quickcheck,
         text
