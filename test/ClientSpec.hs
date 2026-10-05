@@ -12,10 +12,12 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 qualified as BS16
 import Data.ByteString qualified as BS
-import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Short qualified as SBS
 import Data.List (find, sort)
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEnc
 import MintingMachine (vendingMachine)
 import NFT (nftPolicy)
 import PlutusLedgerApi.Common (serialiseCompiledCode)
@@ -31,7 +33,7 @@ import PlutusLedgerApi.V3
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
-import Test.Tasty.QuickCheck (Positive (..), testProperty, (==>))
+import Test.Tasty.QuickCheck (Positive (..), Property, testProperty, (==>))
 import ThreadFamily (threadFamily)
 
 clientTests :: TestTree
@@ -68,20 +70,22 @@ oneShotRef :: TxOutRef
 oneShotRef = TxOutRef (TxId (toBuiltin (rawId 9))) 0
 
 nftBytes :: ByteString
-nftBytes = serialiseCompiledCode (nftPolicy (TokenName (tok "SALE")) oneShotRef)
+nftBytes = SBS.fromShort (serialiseCompiledCode (nftPolicy (TokenName (tok "SALE")) oneShotRef))
 
 threadBytes :: ByteString
-threadBytes = serialiseCompiledCode (threadFamily oneShotRef)
+threadBytes = SBS.fromShort (serialiseCompiledCode (threadFamily oneShotRef))
 
 nftHash, threadHash, machineHash :: ByteString
+nftHex :: Text
 (nftHash, nftHex) = must (scriptHashOf nftBytes)
 (threadHash, _) = must (scriptHashOf threadBytes)
 (machineHash, _) = must (scriptHashOf machineBytes)
 
 machineBytes :: ByteString
 machineBytes =
-  serialiseCompiledCode
-    ( vendingMachine
+  SBS.fromShort $
+    serialiseCompiledCode
+      ( vendingMachine
         (PubKeyHash (tok seller))
         (CurrencySymbol (tok threadHash))
         (CurrencySymbol (tok nftHash))
@@ -552,7 +556,7 @@ envelopeCase = do
 
 spendOnRef :: TxSummary -> Int -> RedeemerView
 spendOnRef s n =
-  let hex = Text.decodeLatin1 (BS16.encode (rawId n))
+  let hex = TextEnc.decodeUtf8 (BS16.encode (rawId n))
    in case find (\r -> redeemerKind r == "spend" && hex `Text.isInfixOf` redeemerTarget r) (summaryRedeemers s) of
         Just r -> r
         Nothing -> error "spending redeemer not found"
@@ -561,6 +565,7 @@ hasAsset :: ByteString -> ByteString -> Integer -> OutputView -> Bool
 hasAsset pol name qty out =
   Map.lookup (pol, name) (bundleAssets (outputValue out)) == Just qty
 
+propChange :: Positive Integer -> Positive Integer -> Property
 propChange (Positive fee) (Positive outCoin) =
   fee + outCoin < 4500000 ==> result
   where

@@ -69,6 +69,7 @@ import Cardano.Ledger.BaseTypes
   ( Network (..)
   , SlotNo (SlotNo)
   , StrictMaybe (..)
+  , TxIx (..)
   , txIxFromIntegral
   )
 import Cardano.Ledger.Binary.Plain qualified as Plain
@@ -254,6 +255,11 @@ scriptHashOf bytes = do
       raw = Hash.hashToBytes h
   pure (raw, bytesHex raw)
 
+-- | @txInToText@ prints the index with 'TxIx''s record 'Show'. Summaries use @hash#n@.
+txRefText :: TxIn -> Text
+txRefText tin@(TxIn _ (TxIx ix)) =
+  Text.takeWhile (/= '#') (txInToText tin) <> "#" <> Text.pack (show ix)
+
 summarise :: BuiltTx -> TxSummary
 summarise (BuiltTx tx) =
   let body = tx ^. bodyTxL
@@ -268,8 +274,8 @@ summarise (BuiltTx tx) =
       ValidityInterval before after = body ^. vldtTxBodyL
       Coin fee = body ^. feeTxBodyL
    in TxSummary
-        { summaryInputs = map txInToText inputList
-        , summaryCollateral = map txInToText (Set.toList (body ^. collateralInputsTxBodyL))
+        { summaryInputs = map txRefText inputList
+        , summaryCollateral = map txRefText (Set.toList (body ^. collateralInputsTxBodyL))
         , summaryOutputs = map outputView (toList (body ^. outputsTxBodyL))
         , summaryMint = mintAssets
         , summaryRedeemers = redeemerViews inputList (body ^. mintTxBodyL) (tx ^. witsTxL . rdmrsTxWitsL)
@@ -895,7 +901,13 @@ build draft = do
         tx1
           & auxDataTxL .~ SJust aux
           & bodyTxL . auxDataHashTxBodyL .~ SJust (TxAuxDataHash (hashAnnotated aux))
-  let tx3 = case mkScriptIntegrity pp tx2 (Set.singleton PlutusV3) of
+  let languages =
+        if null (draftScripts draft)
+          && null (draftSpendRedeemers draft)
+          && null (draftMintRedeemers draft)
+          then Set.empty
+          else Set.singleton PlutusV3
+      tx3 = case mkScriptIntegrity pp tx2 languages of
         SNothing -> tx2
         SJust integrity ->
           tx2 & bodyTxL . scriptIntegrityHashTxBodyL .~ SJust (hashScriptIntegrity integrity)
@@ -1199,7 +1211,7 @@ redeemerViews inputs (MultiAsset mintMap) redeemers =
       let ExUnits mem steps = ex
           (kind, target) = case purpose of
             ConwaySpending (AsIx ix) ->
-              ("spend", maybe (Text.pack (show ix)) txInToText (inputs !? fromIntegral ix))
+              ("spend", maybe (Text.pack (show ix)) txRefText (inputs !? fromIntegral ix))
             ConwayMinting (AsIx ix) ->
               ("mint", fromMaybe (Text.pack (show ix)) (policies !? fromIntegral ix))
             _ -> ("other", "")
