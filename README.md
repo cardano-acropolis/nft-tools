@@ -11,13 +11,15 @@ era. The off-chain client does not build transactions yet.
 |---|---|---|
 | One-shot NFT minting policy | `src/NFT.hs` | Plutus V3. In the `nft-plinth` library, evaluated by the test suite |
 | `write-nft-policy` | `app/write-nft-policy.hs` | Writes a `cardano-cli` `PlutusScriptV3` text envelope |
-| Vending machine | `src/MintingMachine.hs` | Plutus V3 spending validator. In `nft-plinth`, evaluated by the test suite |
+| Vending machine | `src/MintingMachine.hs` | Plutus V3 spending validator. One script for every machine in a drop |
+| Thread-token family | `src/ThreadFamily.hs` | Mints one token name per machine under a shared policy id |
 | `write-vending-machine` | `app/write-vending-machine.hs` | Writes a `cardano-cli` `PlutusScriptV3` text envelope |
+| `write-thread-family` | `app/write-thread-family.hs` | Writes the thread-token minting policy envelope |
 | Off-chain client | `src/Client.hs` | Not in the build. Does not construct transactions |
 | `generate-vending-machine` | `app/generate-vending-machine.hs` | CLI skeleton. Does not build sale transactions |
 | `generate-airdrop` | `app/generate-airdrop.hs` | Stub |
 | `ticket-sale` | `app/ticket-sale.hs` | Stub. The minting policy now allows a later burn |
-| Test suite | `test/Spec.hs` | Evaluates the policy and the vending machine on hand-built V3 script contexts |
+| Test suite | `test/Spec.hs` | Evaluates the policies and the vending machine on hand-built V3 script contexts |
 
 ## Toolchain
 
@@ -132,9 +134,10 @@ amount 1, so it could not share a transaction with another policy and it
 could not burn. It also lifted unused `NftParams` fields (`nftMetadata`,
 `nftAC`, `nftPubKey`) into the script, which changed the policy id without
 being checked. Those fields are gone. The unfinished `mkNFTValidator` in
-that file always failed and has been removed; spending the sale UTxO is the
-vending machine below. Mint this policy once and use that token as the
-machine's thread token.
+that file always failed and has been removed; spending a sale UTxO is the
+vending machine below. A one-machine drop can use this policy as its thread
+policy. A drop with several machines uses `write-thread-family` instead, so
+every machine token shares one policy id.
 
 ## Vending machine
 
@@ -142,19 +145,24 @@ machine's thread token.
 writes a text envelope:
 
 ```sh
+cabal run write-thread-family -- <64-hex-tx-id> 0 family.plutus
 cabal run write-vending-machine -- \
-  <56-hex-seller-pkh> <56-hex-thread-policy> THREAD \
+  <56-hex-seller-pkh> <56-hex-thread-policy> \
   <56-hex-nft-policy> NAME \
   1700000000000 1700086400000 "metadata" machine.plutus
 ```
 
-The command prints the script hash. Each parameter set is a different
-script. The thread token and the sale NFT have to be different assets.
-Create the machine off chain: mint exactly one thread token with
-`write-nft-policy`, and lock it on an output at this script hash with an
-inline datum and no staking credential. The first spend checks that datum.
-There is no state-machine library and no separate minting policy for the
-sale.
+`write-thread-family` prints the policy id. Spending its one-shot UTxO mints
+the machine tokens: any number of token names, each of quantity 1. One name
+is one machine. Burning those names later does not need the UTxO.
+
+`write-vending-machine` prints the script hash. The seller, thread policy,
+sale NFT, window, and metadata are the script parameters, so every machine
+in the drop is the same script. The thread policy and the sale NFT have to
+be different policies. Create each machine off chain by locking one thread
+token on its own output at this script hash, with an inline datum and no
+staking credential. The first spend checks that datum. There is no
+state-machine library.
 
 ### Datum and redeemer
 
@@ -183,11 +191,11 @@ interval whose ends both sit inside the sale window (inclusive). An
 `always` range, an open bound, or a range that sticks out of the window
 fails. The machine's ada must rise by at least `count * price` (overpaying
 is allowed, and a price of 0 is allowed). The machine's NFT quantity drops
-by `count`. Outputs that do not carry the thread token must together hold
-exactly `count` of the sale NFT, and none of those outputs may pay this
-script. The payment stays in the machine until `Withdraw`. The 2021
-transition worked that way; the unfinished validator in that file never
-checked a payment to the seller, and this port does not add one.
+by `count`. Outputs that do not carry this machine's thread token must
+together hold exactly `count` of the sale NFT. The payment stays in that
+machine until `Withdraw`. A `BuyNFT` transaction may contain only that one
+machine's thread token, so one payment cannot be counted for two machines.
+The 2021 transition left the payment in the machine; this port keeps that.
 
 `Withdraw` has two shapes. If some output still holds the thread token,
 both amounts are zero or greater, they are not both zero, and neither
@@ -206,41 +214,61 @@ third party cannot push inventory into the machine. `BuyNFT` has no
 signature check. Paying the ada and delivering the NFT is what authorizes
 it, and the buyer chooses which non-script outputs receive the NFT.
 
-### One UTxO
+### Several machines, one drop
 
-The spent input is found by comparing out-refs as `Data`, same as the
-one-shot policy. Exactly one input may carry the thread token, and it has
-to be the input being spent. Reference inputs do not count. Exactly one
-output may carry it, and that output has to pay this same script hash with
-no staking credential, except on close, where zero outputs carry it. A
-second output that pays this script fails even when it does not hold the
-thread token, so a buy or a withdraw cannot lock proceeds in an output the
-thread token can never spend. The sale NFT and the thread token must not
-be minted or burned in the same transaction as a continuing transition.
-Inventory is moved in from other inputs, not minted by this validator.
-Close is the one case that burns the thread token.
+The spent input is found by comparing out-refs as `Data`. The thread token
+on that input (exactly one name under the thread policy, quantity 1) is
+this machine. Exactly one input may carry that name, and it has to be the
+input being spent. Reference inputs do not count. Exactly one output may
+carry it, and that output has to pay this same script hash with no staking
+credential, except on close, where zero outputs carry it and the token is
+burned. The continuing output cannot also carry a second machine's token.
+Putting two machines on one output would let both script runs treat the
+same lovelace as their own.
 
-Those checks are the double-satisfaction guard. The script looks at the
-thread-token input and the thread-token output, not at "some output paid
-the seller". Two copies of the machine in one transaction fail because
-two inputs would carry the token. A second sale is a second thread token
-and a second parameter set, which is a different script hash.
+Another output at this script is allowed only when it carries a different
+thread token of quantity 1. That is a sibling machine. An output at this
+script with no thread token fails, because nothing could spend it. The
+sale NFT must not be minted or burned in the same transaction. Inventory
+moves between outputs.
+
+`BuyNFT` is stricter. The transaction may not contain any other thread
+token, as an input, an output, or a mint. Two purchases are two
+transactions. They can still land in the same block, because they spend
+different UTxOs. Each purchase checks the ada increase on its own
+continuing output, so a payment that reaches only one machine does not
+satisfy the other.
+
+Seller actions may spend several machines in one transaction. `Withdraw`
+on a machine that has too much stock and `AddNFT` on a machine that has
+too little move inventory without a buyer. `SetPrice` and `Withdraw` are
+per machine: the price in the datum is not forced to match the other
+machines, and closing one machine does not close the others.
 
 ### Contention
 
-One thread token means one UTxO, and every action spends it. Only one
-`SetPrice`, `AddNFT`, `BuyNFT`, or `Withdraw` can succeed in a given block.
-Buyers who want several tokens use `BuyNFT` with a count greater than 1.
-A second machine does not share this UTxO.
+N machine UTxOs can accept about N purchases in one block, one transaction
+each. A buyer who wants several tokens from the machine they picked uses
+`BuyNFT` with a count greater than 1. A buyer who finds a machine empty
+picks another; the empty one fails with `not enough inventory` and does
+not block the rest.
+
+Stock will drift. A popular machine sells out while others still hold
+tokens. The seller rebalances by withdrawing NFTs from a rich machine and
+adding them to a poor one, which can be the same transaction. Prices can
+drift the same way: `SetPrice` updates only the machine being spent, so
+set it on each machine that should change. An idle machine can stay open
+at price 0, or the seller can close it by burning its thread token.
 
 ## What is next
 
 `src/Client.hs` was a placeholder for the plutus-apps `Contract` monad
 (`getUnspentOutput` to choose the UTxO). That monad is gone with
-plutus-apps. The off-chain side is cardano-cli or cardano-api: choose a
-UTxO, run `write-nft-policy`, and submit the mint transaction, then build
-`SetPrice`, `AddNFT`, `BuyNFT`, and `Withdraw` against the envelope from
-`write-vending-machine`. This repo does not build those transactions yet.
+plutus-apps. The off-chain side is cardano-cli or cardano-api: run
+`write-thread-family`, mint one token name per machine, run
+`write-vending-machine`, and submit `SetPrice`, `AddNFT`, `BuyNFT`, and
+`Withdraw` against that envelope. This repo does not build those
+transactions yet.
 
 `generate-vending-machine`, `generate-airdrop`, and `ticket-sale` are still
 stubs on the `MyLib` placeholder. The minting policy already authorizes a

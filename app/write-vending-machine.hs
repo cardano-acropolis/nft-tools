@@ -34,19 +34,18 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [sellerHex, threadHex, threadName, nftHex, nftName, startText, endText, metadataText, outFile] ->
-      writeMachine sellerHex threadHex threadName nftHex nftName startText endText metadataText outFile
+    [sellerHex, threadHex, nftHex, nftName, startText, endText, metadataText, outFile] ->
+      writeMachine sellerHex threadHex nftHex nftName startText endText metadataText outFile
     _ -> do
       name <- getProgName
       die $
         unlines
           [ "Usage: "
               <> name
-              <> " SELLER_PKH_HEX THREAD_POLICY_HEX THREAD_NAME NFT_POLICY_HEX NFT_NAME START END METADATA OUT_FILE"
+              <> " SELLER_PKH_HEX THREAD_POLICY_HEX NFT_POLICY_HEX NFT_NAME START END METADATA OUT_FILE"
           , ""
           , "SELLER_PKH_HEX     28-byte seller payment key hash, hex-encoded"
-          , "THREAD_POLICY_HEX  28-byte policy id of the thread token, hex-encoded"
-          , "THREAD_NAME        UTF-8 thread token name (1-32 bytes)"
+          , "THREAD_POLICY_HEX  28-byte policy id of the thread-token family, hex-encoded"
           , "NFT_POLICY_HEX     28-byte policy id of the NFT for sale, hex-encoded"
           , "NFT_NAME           UTF-8 NFT name (1-32 bytes)"
           , "START              sale window start, POSIX time in milliseconds"
@@ -54,10 +53,11 @@ main = do
           , "METADATA           UTF-8 metadata blob stored in the datum (may be empty)"
           , "OUT_FILE           destination of the PlutusScriptV3 text envelope"
           , ""
-          , "Prints the script hash. The thread token and the sale NFT must be"
-          , "different assets. Mint the thread token with write-nft-policy, lock"
-          , "it on an inline SaleState output at this script, and spend that"
-          , "UTxO with SetPrice, AddNFT, BuyNFT, or Withdraw."
+          , "Prints the script hash. Mint the machine tokens with write-thread-family"
+          , "(one name per machine, each quantity 1). Lock each token on its own"
+          , "inline SaleState output at this script, with no staking credential."
+          , "Buyers spend any one of those UTxOs. The thread policy and the sale"
+          , "NFT must be different policies."
           ]
 
 writeMachine
@@ -68,13 +68,11 @@ writeMachine
   -> String
   -> String
   -> String
-  -> String
   -> FilePath
   -> IO ()
-writeMachine sellerHex threadHex threadName nftHex nftName startText endText metadataText outFile = do
+writeMachine sellerHex threadHex nftHex nftName startText endText metadataText outFile = do
   seller <- hash28 "SELLER_PKH_HEX" sellerHex
   threadCs <- hash28 "THREAD_POLICY_HEX" threadHex
-  threadTn <- tokenName "THREAD_NAME" threadName
   nftCs <- hash28 "NFT_POLICY_HEX" nftHex
   nftTn <- tokenName "NFT_NAME" nftName
   start <- time "START" startText
@@ -82,15 +80,14 @@ writeMachine sellerHex threadHex threadName nftHex nftName startText endText met
   if start <= end
     then pure ()
     else die "START must be less than or equal to END"
-  if threadCs == nftCs && threadTn == nftTn
-    then die "the thread token and the sale NFT must be different assets"
+  if threadCs == nftCs
+    then die "the thread policy and the sale NFT policy must be different"
     else pure ()
   let metadata = b (Text.encodeUtf8 (Text.pack metadataText))
       code =
         vendingMachine
           (PubKeyHash seller)
           (CurrencySymbol threadCs)
-          (TokenName threadTn)
           (CurrencySymbol nftCs)
           (TokenName nftTn)
           (POSIXTime start)

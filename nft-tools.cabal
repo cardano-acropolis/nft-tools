@@ -81,6 +81,7 @@ library nft-plinth
     hs-source-dirs:   src
     exposed-modules:
         NFT
+        ThreadFamily
         MintingMachine
     build-depends:    base >=4.18 && <5
 
@@ -116,6 +117,17 @@ executable ticket-sale
         nft-tools
     hs-source-dirs:   app
 
+executable write-thread-family
+    import:           ghc-only-options
+    main-is:          write-thread-family.hs
+    hs-source-dirs:   app
+    build-depends:
+        base >=4.18 && <5,
+        base16-bytestring ^>=1.0,
+        bytestring,
+        nft-tools:nft-plinth,
+        plutus-ledger-api ^>=1.71.0.0
+
 executable write-vending-machine
     import:           ghc-only-options
     main-is:          write-vending-machine.hs
@@ -146,6 +158,7 @@ test-suite nft-tools-test
     main-is:          Spec.hs
     other-modules:
         NFTSpec
+        ThreadFamilySpec
         VendingSpec
     hs-source-dirs:   test
     build-depends:
