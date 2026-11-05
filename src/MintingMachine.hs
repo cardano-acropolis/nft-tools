@@ -16,9 +16,11 @@
 -- | Vending machine: a state machine that sells NFTs from an inventory
 -- at a seller-controlled price.
 --
--- Work in progress: not yet part of the cabal build (needs the Plutus
--- toolchain — see the note in nft-tools.cabal). Modeled on the token
--- sale state machine from plutus-apps:
+-- Not part of the cabal build. The imports below are plutus-apps
+-- ('Ledger', 'Ledger.Typed.Scripts', 'Ledger.Constraints',
+-- 'Plutus.Contract.StateMachine'), and that repository is archived.
+-- The next port is a Plutus V3 spending validator, not a new pin of
+-- plutus-apps. See the README. The original sketch followed
 -- https://github.com/input-output-hk/plutus-apps/blob/main/plutus-contract/src/Plutus/Contract/StateMachine.hs
 module MintingMachine
   ( VendingMachineParams (..)
