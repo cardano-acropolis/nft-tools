@@ -15,7 +15,7 @@ port yet.
 | Vending machine | `src/MintingMachine.hs` | Not in the build. Still the 2021 plutus-apps draft |
 | Off-chain client | `src/Client.hs` | Not in the build. Empty stub |
 | `generate-vending-machine` | `app/generate-vending-machine.hs` | CLI skeleton |
-| `generate-airdrop` | `app/generate-airdrop.hs` | Stub |
+| `generate-airdrop` | `app/generate-airdrop.hs` | Working: weighted, verifiable draw from a public seed |
 | `ticket-sale` | `app/ticket-sale.hs` | Stub. The minting policy now allows a later burn |
 | Test suite | `test/NFTSpec.hs` | Evaluates the policy on hand-built V3 script contexts |
 
@@ -153,8 +153,8 @@ UTxO, run `write-nft-policy`, and submit the mint transaction. The same
 client is where the vending-machine transactions will be built once the
 validator exists.
 
-`generate-vending-machine`, `generate-airdrop`, and `ticket-sale` are still
-stubs on the `MyLib` placeholder. Ticketing can burn on redemption only
+`generate-vending-machine` and `ticket-sale` are still stubs on the `MyLib`
+placeholder. Ticketing can burn on redemption only
 after the sale validator exists; the minting policy already authorizes the
 burn.
 
