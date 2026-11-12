@@ -18,7 +18,7 @@ drop. You sign them with `cardano-cli`.
 | `write-thread-family` | `app/write-thread-family.hs` | Writes the thread-token minting policy envelope |
 | Off-chain client | `offchain/Client.hs`, `app/nft-client.hs` | Builds unsigned `TxBodyConway` bodies: mint, open, seed, set-price, buy, withdraw, close, rebalance |
 | `generate-vending-machine` | `app/generate-vending-machine.hs` | Still a stub. Sale transactions are `nft-client` |
-| `generate-airdrop` | `app/generate-airdrop.hs` | Stub |
+| `generate-airdrop` | `app/generate-airdrop.hs` | Working: weighted, verifiable draw from a public seed |
 | `ticket-sale` | `app/ticket-sale.hs` | Stub. The minting policy now allows a later burn |
 | Test suite | `test/Spec.hs` | Evaluates the scripts, and checks the built transactions without a node |
 
@@ -281,7 +281,7 @@ this CHaP pin (11.7) depends on `plutus-ledger-api ^>=1.70`, which excludes
 the 1.71 line the scripts use. `cardano-ledger-conway` 1.23 accepts 1.71.
 Release 1.24 is dated after the pin, so the solver never sees it.
 
-`generate-airdrop` and `ticket-sale` are still stubs. The minting policy
+`ticket-sale` is still a stub. The minting policy
 already authorizes a later burn, which a redemption transaction would use.
 `generate-vending-machine` does not build sale transactions either.
 
@@ -418,7 +418,7 @@ If `--fee` is below the printed ledger minimum, rebuild the body.
 
 ## What is left
 
-`generate-airdrop` and `ticket-sale` remain stubs. A redemption flow would
+`ticket-sale` remains a stub. A redemption flow would
 burn the sale NFT with the policy that already allows that burn.
 
 ## Notes
