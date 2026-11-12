@@ -10,7 +10,8 @@ main = do
     [nftSymbol] -> do
       putStrLn $ "Generating vending machine for asset: " <> nftSymbol
       -- The validator envelope is written by write-vending-machine.
-      -- This executable still does not build the sale transactions.
+      -- Sale transactions are built by nft-client. This executable does not
+      -- build them. generate-airdrop and ticket-sale are still stubs.
       MyLib.someFunc
     _ -> do
       name <- getProgName
