@@ -9,8 +9,8 @@ main = do
   case args of
     [nftSymbol] -> do
       putStrLn $ "Generating vending machine for asset: " <> nftSymbol
-      -- TODO: generate the vending-machine minting policy for nftSymbol
-      -- (see src/MintingMachine.hs).
+      -- The validator envelope is written by write-vending-machine.
+      -- This executable still does not build the sale transactions.
       MyLib.someFunc
     _ -> do
       name <- getProgName
